@@ -334,7 +334,7 @@ export default function App() {
             />
             
             {/* Decorative Glow inside Splash */}
-            <div className={`absolute top-[20%] left-[50%] translate-x-[-50%] w-[400px] h-[400px] rounded-full pointer-events-none blur-[120px] ${
+            <div className={`absolute top-[20%] left-[50%] translate-x-[-50%] w-[90%] max-w-[400px] aspect-square rounded-full pointer-events-none blur-[120px] ${
               isDarkMode ? "bg-[#D4AF37] opacity-[0.08]" : "bg-[#D4AF37] opacity-[0.1]"
             }`}></div>
 
@@ -376,10 +376,10 @@ export default function App() {
       <div style={{ opacity: showSplash ? 0 : 1, transition: 'opacity 0.6s ease' }} className="w-full flex items-center justify-center pointer-events-none relative z-10">
         <div className={`w-full max-w-[640px] relative pointer-events-auto flex flex-col`}>
           {/* Background Decorative Glow Elements */}
-          <div className={`absolute top-[-10%] left-[-10%] w-[500px] h-[500px] rounded-full pointer-events-none blur-[120px] transition-all duration-300 ${
+          <div className={`absolute top-[-10%] left-[-10%] w-[80%] max-w-[500px] aspect-square rounded-full pointer-events-none blur-[120px] transition-all duration-300 ${
             isDarkMode ? "bg-[#D4AF37] opacity-[0.04]" : "bg-[#D4AF37] opacity-[0.08]"
           }`}></div>
-          <div className={`absolute bottom-[-10%] right-[10%] w-[400px] h-[400px] rounded-full pointer-events-none blur-[100px] transition-all duration-300 ${
+          <div className={`absolute bottom-[-10%] right-[10%] w-[70%] max-w-[400px] aspect-square rounded-full pointer-events-none blur-[100px] transition-all duration-300 ${
             isDarkMode ? "bg-white opacity-[0.02]" : "bg-white opacity-[0.05]"
           }`}></div>
 
@@ -403,7 +403,7 @@ export default function App() {
           isDarkMode ? "border-white/5" : "border-slate-100"
         }`}>
           {/* Logo Brand area */}
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2.5 shrink-0">
             <span className={`w-3 h-3 rounded-full ${loading ? "bg-amber-500 animate-ping" : "bg-[#D4AF37] animate-pulse"}`} />
             <img 
               src={logoImg} 
@@ -411,18 +411,18 @@ export default function App() {
               className="h-8 sm:h-9 w-auto object-contain select-none" 
               referrerPolicy="no-referrer" 
             />
-            <span className="font-bold text-lg tracking-wider font-display text-[#D4AF37]">
+            <span className="font-bold text-base sm:text-lg tracking-wider font-display text-[#D4AF37]">
               {t.titleLogo}
             </span>
           </div>
 
           {/* Action Row */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
             {/* Dark Mode Switcher: Sun / Moon reversed */}
             <button
               onClick={() => setIsDarkMode(prev => !prev)}
               id="theme-toggle-btn"
-              className={`w-9 h-9 rounded-full flex items-center justify-center transition-all border cursor-pointer ${
+              className={`w-11 h-11 rounded-full flex items-center justify-center transition-all border cursor-pointer ${
                 isDarkMode 
                   ? "bg-white/5 border-white/10 text-[#D4AF37] hover:bg-white/10" 
                   : "bg-slate-100 border-slate-200 text-amber-600 hover:bg-slate-200"
@@ -430,9 +430,9 @@ export default function App() {
               title={t.toggleTheme}
             >
               {isDarkMode ? (
-                <Sun className="w-[18px] h-[18px] fill-[#D4AF37] text-[#D4AF37]" />
+                <Sun className="w-[20px] h-[20px] fill-[#D4AF37] text-[#D4AF37]" />
               ) : (
-                <Moon className="w-[18px] h-[18px] fill-amber-600 text-amber-600" />
+                <Moon className="w-[20px] h-[20px] fill-amber-600 text-amber-600" />
               )}
             </button>
 
@@ -440,7 +440,7 @@ export default function App() {
             <button
               onClick={() => setLang(prev => prev === "ar" ? "en" : "ar")}
               id="btn-lang-toggle"
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border cursor-pointer ${
+              className={`h-11 px-4 rounded-xl text-sm font-bold transition-all border cursor-pointer flex items-center justify-center ${
                 isDarkMode 
                   ? "bg-white/5 border-white/10 text-white/80 hover:text-white" 
                   : "bg-slate-100 border-slate-200 text-slate-700 hover:text-slate-900"
@@ -453,21 +453,21 @@ export default function App() {
               <button
                 onClick={handleLogout}
                 id="header-logout-btn"
-                className={`w-9 h-9 rounded-full flex items-center justify-center transition-all border hover:bg-rose-500/10 hover:text-rose-500 cursor-pointer ${
+                className={`w-11 h-11 rounded-full flex items-center justify-center transition-all border hover:bg-rose-500/10 hover:text-rose-500 cursor-pointer ${
                   isDarkMode 
                     ? "bg-white/5 border-white/10 text-white/50" 
                     : "bg-slate-100 border-slate-200 text-slate-500"
                 }`}
                 title={t.logoutButton}
               >
-                <LogOut className="w-[15px] h-[15px]" />
+                <LogOut className="w-[18px] h-[18px]" />
               </button>
             )}
           </div>
         </div>
 
         {/* Content Body */}
-        <div className="relative z-10 flex-1 p-6 sm:p-10 flex flex-col justify-center">
+        <div className="relative z-10 flex-1 p-4 sm:p-8 flex flex-col justify-center">
           <AnimatePresence mode="wait">
             {!session ? (
               /* ========================================================
@@ -650,16 +650,16 @@ export default function App() {
                 </div>
 
                 {/* Additional Information Sub-panel */}
-                <div className={`p-5 rounded-[22px] border text-start space-y-4 transition-colors duration-300 ${
+                <div className={`p-4 sm:p-5 rounded-[20px] sm:rounded-[22px] border text-start space-y-4 transition-colors duration-300 ${
                   isDarkMode 
                     ? "bg-white/[0.02] border-white/5" 
                     : "bg-slate-50/80 border-slate-100"
                 }`}>
                   {/* Name field */}
                   {session.balance.fullName && (
-                    <div className="flex justify-between items-center text-sm">
+                    <div className="flex flex-col sm:flex-row sm:justify-between items-start sm:items-center text-sm gap-1 sm:gap-0">
                       <span className={isDarkMode ? "text-white/50" : "text-slate-400"}>{t.fullNameLabel}</span>
-                      <span className={`font-black ${isDarkMode ? "text-white/95" : "text-slate-800"}`}>{session.balance.fullName}</span>
+                      <span className={`font-black text-start sm:text-end break-words w-full sm:w-auto ${isDarkMode ? "text-white/95" : "text-slate-800"}`}>{session.balance.fullName}</span>
                     </div>
                   )}
 
@@ -673,9 +673,9 @@ export default function App() {
 
                   {/* Address field */}
                   {session.balance.address && (
-                    <div className="flex justify-between items-center text-sm">
+                    <div className="flex flex-col sm:flex-row sm:justify-between items-start sm:items-center text-sm gap-1 sm:gap-0">
                       <span className={isDarkMode ? "text-white/50" : "text-slate-400"}>{t.addressLabel}</span>
-                      <span className={`font-black ${isDarkMode ? "text-white/95" : "text-slate-800"}`}>{session.balance.address}</span>
+                      <span className={`font-black text-start sm:text-end break-words w-full sm:w-auto ${isDarkMode ? "text-white/95" : "text-slate-800"}`}>{session.balance.address}</span>
                     </div>
                   )}
 
