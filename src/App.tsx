@@ -309,7 +309,7 @@ export default function App() {
 
   return (
     <div 
-      className={`min-h-[100dvh] w-full flex flex-col overflow-y-auto overflow-x-hidden transition-all duration-300 font-sans relative select-none ${
+      className={`h-[100dvh] w-full flex flex-col overflow-hidden transition-all duration-300 font-sans relative select-none ${
         isDarkMode ? "bg-[#07070a] text-white" : "bg-[#f4f5f7] text-slate-800"
       }`}
     >
@@ -443,8 +443,15 @@ export default function App() {
         </div>
       </header>
 
-      <main style={{ opacity: showSplash ? 0 : 1, transition: 'opacity 0.6s ease' }} className="flex-1 w-full flex items-center justify-center pointer-events-none relative z-10 px-4 pb-4">
-        <div className={`w-full max-w-[640px] relative pointer-events-auto flex flex-col`}>
+      <main 
+        style={{ 
+          opacity: showSplash ? 0 : 1, 
+          transition: 'opacity 0.6s ease',
+          paddingBottom: 'max(env(safe-area-inset-bottom), 40px)'
+        }} 
+        className="flex-1 w-full flex flex-col overflow-y-auto overflow-x-hidden relative z-10 px-4"
+      >
+        <div className={`w-full max-w-[640px] relative flex flex-col mx-auto my-auto shrink-0 py-4 sm:py-8`}>
           {/* Background Decorative Glow Elements */}
           <div className={`absolute top-[-10%] left-[-10%] w-[80%] max-w-[500px] aspect-square rounded-full pointer-events-none blur-[120px] transition-all duration-300 ${
             isDarkMode ? "bg-[#D4AF37] opacity-[0.04]" : "bg-[#D4AF37] opacity-[0.08]"
