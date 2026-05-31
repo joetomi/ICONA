@@ -28,10 +28,16 @@
   animation: float-blob-reverse 10s infinite ease-in-out;
 }
 
+html, body {
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+  overflow-x: hidden;
+}
+
 /* Base scrollbar customization */
 ::-webkit-scrollbar {
   width: 6px;
-  height: 6px;
+  height: 0px; /* Disable horizontal scrollbar visual completely */
 }
 ::-webkit-scrollbar-track {
   background: rgba(255, 255, 255, 0.02);
