@@ -309,7 +309,7 @@ export default function App() {
 
   return (
     <div 
-      className={`h-screen w-full overflow-y-auto overflow-x-hidden transition-all duration-300 font-sans flex items-center justify-center relative p-4 sm:p-6 select-none ${
+      className={`min-h-[100dvh] w-full flex flex-col overflow-y-auto overflow-x-hidden transition-all duration-300 font-sans relative select-none ${
         isDarkMode ? "bg-[#07070a] text-white" : "bg-[#f4f5f7] text-slate-800"
       }`}
     >
@@ -373,7 +373,77 @@ export default function App() {
         )}
       </AnimatePresence>
 
-      <div style={{ opacity: showSplash ? 0 : 1, transition: 'opacity 0.6s ease' }} className="w-full flex items-center justify-center pointer-events-none relative z-10">
+      <header 
+        className="w-full shrink-0 flex justify-center z-50 pointer-events-auto transition-opacity duration-600 mb-2 sm:mb-8"
+        style={{ opacity: showSplash ? 0 : 1, paddingTop: 'max(env(safe-area-inset-top), 20px)' }}
+      >
+        <div className="w-full max-w-[640px] px-4 flex items-center justify-between">
+          {/* Logo Brand area */}
+          <div className="flex items-center gap-2.5 shrink-0">
+            <span className={`w-3 h-3 rounded-full ${loading ? "bg-amber-500 animate-ping" : "bg-[#D4AF37] animate-pulse"}`} />
+            <img 
+              src={logoImg} 
+              alt="Icona Logo" 
+              className="h-8 sm:h-9 w-auto object-contain select-none" 
+              referrerPolicy="no-referrer" 
+            />
+            <span className="font-bold text-base sm:text-lg tracking-wider font-display text-[#D4AF37]">
+              {t.titleLogo}
+            </span>
+          </div>
+
+          {/* Action Row */}
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+            {/* Dark Mode Switcher */}
+            <button
+              onClick={() => setIsDarkMode(prev => !prev)}
+              id="theme-toggle-btn"
+              className={`w-11 h-11 rounded-full flex items-center justify-center transition-all border cursor-pointer ${
+                isDarkMode 
+                  ? "bg-white/5 border-white/10 text-[#D4AF37] hover:bg-white/10" 
+                  : "bg-white border-slate-200 text-amber-600 hover:bg-slate-50 shadow-sm"
+              }`}
+              title={t.toggleTheme}
+            >
+              {isDarkMode ? (
+                <Sun className="w-[20px] h-[20px] fill-[#D4AF37] text-[#D4AF37]" />
+              ) : (
+                <Moon className="w-[20px] h-[20px] fill-amber-600 text-amber-600" />
+              )}
+            </button>
+
+            {/* Language switch button */}
+            <button
+              onClick={() => setLang(prev => prev === "ar" ? "en" : "ar")}
+              id="btn-lang-toggle"
+              className={`h-11 px-4 rounded-xl text-sm font-bold transition-all border cursor-pointer flex items-center justify-center ${
+                isDarkMode 
+                  ? "bg-white/5 border-white/10 text-white/80 hover:text-white" 
+                  : "bg-white border-slate-200 text-slate-700 hover:text-slate-900 shadow-sm"
+              }`}
+            >
+              {lang === "ar" ? "EN" : "العربية"}
+            </button>
+
+            {session && (
+              <button
+                onClick={handleLogout}
+                id="header-logout-btn"
+                className={`w-11 h-11 rounded-full flex items-center justify-center transition-all border hover:bg-rose-500/10 hover:text-rose-500 cursor-pointer ${
+                  isDarkMode 
+                    ? "bg-white/5 border-white/10 text-white/50" 
+                    : "bg-white border-slate-200 text-slate-500 shadow-sm"
+                }`}
+                title={t.logoutButton}
+              >
+                <LogOut className="w-[18px] h-[18px]" />
+              </button>
+            )}
+          </div>
+        </div>
+      </header>
+
+      <main style={{ opacity: showSplash ? 0 : 1, transition: 'opacity 0.6s ease' }} className="flex-1 w-full flex items-center justify-center pointer-events-none relative z-10 px-4 pb-4">
         <div className={`w-full max-w-[640px] relative pointer-events-auto flex flex-col`}>
           {/* Background Decorative Glow Elements */}
           <div className={`absolute top-[-10%] left-[-10%] w-[80%] max-w-[500px] aspect-square rounded-full pointer-events-none blur-[120px] transition-all duration-300 ${
@@ -397,74 +467,6 @@ export default function App() {
             opacity: isDarkMode ? 0.12 : 0.08
           }}
         />
-
-        {/* Unified Top Navigation / Controls Bar */}
-        <div className={`relative z-10 flex items-center justify-between p-4 sm:p-6 border-b transition-colors duration-300 ${
-          isDarkMode ? "border-white/5" : "border-slate-100"
-        }`}>
-          {/* Logo Brand area */}
-          <div className="flex items-center gap-2.5 shrink-0">
-            <span className={`w-3 h-3 rounded-full ${loading ? "bg-amber-500 animate-ping" : "bg-[#D4AF37] animate-pulse"}`} />
-            <img 
-              src={logoImg} 
-              alt="Icona Logo" 
-              className="h-8 sm:h-9 w-auto object-contain select-none" 
-              referrerPolicy="no-referrer" 
-            />
-            <span className="font-bold text-base sm:text-lg tracking-wider font-display text-[#D4AF37]">
-              {t.titleLogo}
-            </span>
-          </div>
-
-          {/* Action Row */}
-          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-            {/* Dark Mode Switcher: Sun / Moon reversed */}
-            <button
-              onClick={() => setIsDarkMode(prev => !prev)}
-              id="theme-toggle-btn"
-              className={`w-11 h-11 rounded-full flex items-center justify-center transition-all border cursor-pointer ${
-                isDarkMode 
-                  ? "bg-white/5 border-white/10 text-[#D4AF37] hover:bg-white/10" 
-                  : "bg-slate-100 border-slate-200 text-amber-600 hover:bg-slate-200"
-              }`}
-              title={t.toggleTheme}
-            >
-              {isDarkMode ? (
-                <Sun className="w-[20px] h-[20px] fill-[#D4AF37] text-[#D4AF37]" />
-              ) : (
-                <Moon className="w-[20px] h-[20px] fill-amber-600 text-amber-600" />
-              )}
-            </button>
-
-            {/* Language switch button */}
-            <button
-              onClick={() => setLang(prev => prev === "ar" ? "en" : "ar")}
-              id="btn-lang-toggle"
-              className={`h-11 px-4 rounded-xl text-sm font-bold transition-all border cursor-pointer flex items-center justify-center ${
-                isDarkMode 
-                  ? "bg-white/5 border-white/10 text-white/80 hover:text-white" 
-                  : "bg-slate-100 border-slate-200 text-slate-700 hover:text-slate-900"
-              }`}
-            >
-              {lang === "ar" ? "EN" : "العربية"}
-            </button>
-
-            {session && (
-              <button
-                onClick={handleLogout}
-                id="header-logout-btn"
-                className={`w-11 h-11 rounded-full flex items-center justify-center transition-all border hover:bg-rose-500/10 hover:text-rose-500 cursor-pointer ${
-                  isDarkMode 
-                    ? "bg-white/5 border-white/10 text-white/50" 
-                    : "bg-slate-100 border-slate-200 text-slate-500"
-                }`}
-                title={t.logoutButton}
-              >
-                <LogOut className="w-[18px] h-[18px]" />
-              </button>
-            )}
-          </div>
-        </div>
 
         {/* Content Body */}
         <div className="relative z-10 flex-1 p-4 sm:p-8 flex flex-col justify-center">
@@ -765,7 +767,7 @@ export default function App() {
 
       </div>
         </div>
-      </div>
+      </main>
     </div>
   );
 }
