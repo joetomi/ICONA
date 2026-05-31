@@ -148,6 +148,7 @@ interface BalanceData {
   startDate?: string;
   endDate?: string;
   nextPayment?: string;
+  deposit?: string;
 }
 
 function parseBalance(html: string): BalanceData | null {
@@ -269,6 +270,9 @@ function parseBalance(html: string): BalanceData | null {
           if (!finalBalance.startDate) {
             finalBalance.startDate = value;
           }
+        } else if (label.includes("deposit") || label.includes("رصيد")) {
+          const m = value.match(/[\d.]+/);
+          if (m) finalBalance.deposit = m[0];
         }
       }
 
@@ -289,6 +293,9 @@ function parseBalance(html: string): BalanceData | null {
           finalBalance.status = value;
         } else if ((label.includes("contract date") || label.includes("activation")) && !finalBalance.startDate) {
           finalBalance.startDate = value;
+        } else if (label.includes("deposit") && !finalBalance.deposit) {
+          const m = value.match(/[\d.]+/);
+          if (m) finalBalance.deposit = m[0];
         }
       }
 

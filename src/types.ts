@@ -8,6 +8,7 @@ export interface BalanceData {
   startDate?: string;
   endDate?: string;
   nextPayment?: string;
+  deposit?: string;
 }
 
 export interface UserSessionData {
@@ -49,4 +50,5 @@ export interface TranslationSet {
   startDateLabel: string;
   endDateLabel: string;
   nextPaymentLabel: string;
+  depositLabel: string;
 }

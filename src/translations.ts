@@ -31,7 +31,8 @@ export const translations: Record<"ar" | "en", TranslationSet> = {
     statusLabel: "الحالة",
     startDateLabel: "تاريخ البدء",
     endDateLabel: "تاريخ الانتهاء",
-    nextPaymentLabel: "الدفعة التالية"
+    nextPaymentLabel: "الدفعة التالية",
+    depositLabel: "الرصيد"
   },
   en: {
     title: "Welcome to Icona",
@@ -63,6 +64,7 @@ export const translations: Record<"ar" | "en", TranslationSet> = {
     statusLabel: "Status",
     startDateLabel: "Start Date",
     endDateLabel: "End Date",
-    nextPaymentLabel: "Next Payment"
+    nextPaymentLabel: "Next Payment",
+    depositLabel: "Deposit"
   }
 };

@@ -614,6 +614,13 @@ export default function App() {
                   }`}>
                     {lang === "ar" ? "مرحباً بك يا" : "Welcome,"} <span className="text-[#D4AF37] font-bold">{session.balance.fullName || session.username}</span>
                   </h3>
+                  {session.balance.deposit && (
+                    <div className="text-center mt-2 mb-4">
+                      <span className={`text-lg sm:text-xl font-bold tracking-wide ${isDarkMode ? "text-[#D4AF37]" : "text-[#D4AF37]"}`}>
+                        {t.depositLabel}: <span className={isDarkMode ? "text-white" : "text-slate-800"}>{session.balance.deposit} {lang === "ar" ? "د.ل" : "LYD"}</span>
+                      </span>
+                    </div>
+                  )}
                   <p className={`text-xl sm:text-2xl font-black tracking-tight ${
                     isDarkMode ? "text-white" : "text-slate-800"
                   }`}>
