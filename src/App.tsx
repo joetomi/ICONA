@@ -160,6 +160,8 @@ export default function App() {
   // Keep track of language choice
   useEffect(() => {
     localStorage.setItem("icona_lang", lang);
+    document.documentElement.dir = lang === "ar" ? "rtl" : "ltr";
+    document.documentElement.lang = lang;
   }, [lang]);
 
   // Keep track of active session storage
@@ -307,8 +309,7 @@ export default function App() {
 
   return (
     <div 
-      dir={dir} 
-      className={`min-h-screen transition-all duration-300 font-sans flex items-center justify-center relative p-4 sm:p-6 select-none ${
+      className={`h-screen w-full overflow-y-auto overflow-x-hidden transition-all duration-300 font-sans flex items-center justify-center relative p-4 sm:p-6 select-none ${
         isDarkMode ? "bg-[#07070a] text-white" : "bg-[#f4f5f7] text-slate-800"
       }`}
     >
