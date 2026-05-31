@@ -131,6 +131,9 @@ export default function App() {
   const [statusMessage, setStatusMessage] = useState("");
   const [errorText, setErrorText] = useState("");
 
+  // Splash screen state
+  const [showSplash, setShowSplash] = useState(true);
+
   // Session state
   const [session, setSession] = useState<UserSessionData | null>(() => {
     try {
@@ -143,6 +146,16 @@ export default function App() {
     }
     return null;
   });
+
+  // Splash Screen Timer
+  useEffect(() => {
+    if (showSplash) {
+      const timer = setTimeout(() => {
+        setShowSplash(false);
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [showSplash]);
 
   // Keep track of language choice
   useEffect(() => {
@@ -299,21 +312,83 @@ export default function App() {
         isDarkMode ? "bg-[#07070a] text-white" : "bg-[#f4f5f7] text-slate-800"
       }`}
     >
-      {/* Background Decorative Glow Elements */}
-      <div className={`absolute top-[-10%] left-[-10%] w-[500px] h-[500px] rounded-full pointer-events-none blur-[120px] transition-all duration-300 ${
-        isDarkMode ? "bg-[#D4AF37] opacity-[0.04]" : "bg-[#D4AF37] opacity-[0.08]"
-      }`}></div>
-      <div className={`absolute bottom-[-10%] right-[10%] w-[400px] h-[400px] rounded-full pointer-events-none blur-[100px] transition-all duration-300 ${
-        isDarkMode ? "bg-white opacity-[0.02]" : "bg-white opacity-[0.05]"
-      }`}></div>
+      <AnimatePresence>
+        {showSplash && (
+          <motion.div
+            key="splash"
+            initial={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 1.05 }}
+            transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+            className={`fixed inset-0 z-[100] flex flex-col items-center justify-center ${
+              isDarkMode ? "bg-[#07070a]" : "bg-[#f4f5f7]"
+            }`}
+          >
+            {/* Splash Background Graphic */}
+            <div 
+              className="absolute inset-0 z-0 bg-cover bg-center pointer-events-none transition-opacity duration-300"
+              style={{ 
+                backgroundImage: `url(${bkgImg})`,
+                opacity: isDarkMode ? 0.08 : 0.04
+              }}
+            />
+            
+            {/* Decorative Glow inside Splash */}
+            <div className={`absolute top-[20%] left-[50%] translate-x-[-50%] w-[400px] h-[400px] rounded-full pointer-events-none blur-[120px] ${
+              isDarkMode ? "bg-[#D4AF37] opacity-[0.08]" : "bg-[#D4AF37] opacity-[0.1]"
+            }`}></div>
 
-      {/* Main Container */}
-      <div className={`w-full max-w-[640px] min-h-[460px] rounded-[24px] sm:rounded-[32px] border shadow-2xl relative flex flex-col overflow-hidden z-10 transition-all duration-300 ${
-        isDarkMode 
-          ? "bg-slate-950/40 backdrop-blur-[40px] border-white/10" 
-          : "bg-white/90 border-slate-200/80 shadow-[0_20px_50px_rgba(0,0,0,0.06)]"
-      }`}>
-        {/* Card Background Image (not for the back of the website) */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2, duration: 0.8 }}
+              className="z-10 flex flex-col items-center px-6 text-center"
+            >
+              <motion.div
+                animate={{ scale: [1, 1.03, 1] }}
+                transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+              >
+                <img src={logoImg} alt="Icona Logo" className="w-[180px] sm:w-[220px] h-auto drop-shadow-2xl mb-8" />
+              </motion.div>
+              
+              <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold tracking-tight max-w-lg mb-8 drop-shadow-sm" style={{ color: '#D4AF37' }}>
+                مرحباً بك في بوابة ايقونة للمستخدمين
+              </h1>
+              
+              {/* Animated Progress Bar */}
+              <div 
+                className="w-48 sm:w-64 h-1.5 rounded-full flex overflow-hidden relative" 
+                style={{ backgroundColor: isDarkMode ? 'rgba(212,175,55,0.15)' : 'rgba(212,175,55,0.25)' }}
+              >
+                <motion.div
+                  initial={{ width: "0%" }}
+                  animate={{ width: "100%" }}
+                  transition={{ duration: 4.8, ease: "linear" }}
+                  className="bg-[#D4AF37] h-full rounded-full absolute left-0"
+                  style={{ transformOrigin: 'left' }}
+                />
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <div style={{ opacity: showSplash ? 0 : 1, transition: 'opacity 0.6s ease' }} className="w-full flex items-center justify-center pointer-events-none relative z-10">
+        <div className={`w-full max-w-[640px] relative pointer-events-auto flex flex-col`}>
+          {/* Background Decorative Glow Elements */}
+          <div className={`absolute top-[-10%] left-[-10%] w-[500px] h-[500px] rounded-full pointer-events-none blur-[120px] transition-all duration-300 ${
+            isDarkMode ? "bg-[#D4AF37] opacity-[0.04]" : "bg-[#D4AF37] opacity-[0.08]"
+          }`}></div>
+          <div className={`absolute bottom-[-10%] right-[10%] w-[400px] h-[400px] rounded-full pointer-events-none blur-[100px] transition-all duration-300 ${
+            isDarkMode ? "bg-white opacity-[0.02]" : "bg-white opacity-[0.05]"
+          }`}></div>
+
+          {/* Main Container */}
+          <div className={`w-full min-h-[460px] rounded-[24px] sm:rounded-[32px] border shadow-2xl relative flex flex-col overflow-hidden z-10 transition-all duration-300 ${
+            isDarkMode 
+              ? "bg-slate-950/40 backdrop-blur-[40px] border-white/10" 
+              : "bg-white/90 border-slate-200/80 shadow-[0_20px_50px_rgba(0,0,0,0.06)]"
+          }`}>
+            {/* Card Background Image (not for the back of the website) */}
         <div 
           className="absolute inset-0 pointer-events-none bg-cover bg-center z-0 transition-opacity duration-300"
           style={{ 
@@ -680,6 +755,8 @@ export default function App() {
           )}
         </div>
 
+      </div>
+        </div>
       </div>
     </div>
   );
