@@ -1,0 +1,6 @@
+{
+  "name": "Icona Internet Balance Check",
+  "description": "تطبيق ويب متكامل لمربع فحص وإدارة رصيد مشتركين شبكة إنترنت أيقونة / Icona Internet balance inspector.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
