@@ -28,12 +28,24 @@
   animation: float-blob-reverse 10s infinite ease-in-out;
 }
 
+:root {
+  --bg-color: #07070a; /* Dark default */
+  --text-color: #ffffff;
+}
+
+[data-theme="light"] {
+  --bg-color: #f4f5f7; /* Clean light mode background */
+  --text-color: #1a1a1a;
+}
+
 *, *::before, *::after {
   box-sizing: border-box;
 }
 
 html, body {
-  background-color: #07070a;
+  background-color: var(--bg-color);
+  color: var(--text-color);
+  transition: background-color 0.3s ease, color 0.3s ease;
   margin: 0;
   padding: 0;
   width: 100%;

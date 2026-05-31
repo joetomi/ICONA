@@ -119,9 +119,11 @@ export default function App() {
     return saved !== "light"; // Default to dark mode (true)
   });
 
-  // Keep track of theme choice in cache
+  // Keep track of theme choice in cache and set html data-theme
   useEffect(() => {
-    localStorage.setItem("icona_theme", isDarkMode ? "dark" : "light");
+    const theme = isDarkMode ? "dark" : "light";
+    localStorage.setItem("icona_theme", theme);
+    document.documentElement.setAttribute("data-theme", theme);
   }, [isDarkMode]);
 
   // UI state
@@ -310,8 +312,12 @@ export default function App() {
   return (
     <div 
       className={`h-[100dvh] w-full flex flex-col overflow-hidden transition-all duration-300 font-sans relative select-none ${
-        isDarkMode ? "bg-[#07070a] text-white" : "bg-[#f4f5f7] text-slate-800"
+        isDarkMode ? "text-white" : "text-slate-800"
       }`}
+      style={{
+        backgroundColor: "var(--bg-color)",
+        backgroundImage: "var(--bg-gradient)"
+      }}
     >
       <AnimatePresence>
         {showSplash && (
@@ -320,9 +326,11 @@ export default function App() {
             initial={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 1.05 }}
             transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
-            className={`fixed inset-0 z-[100] flex flex-col items-center justify-center ${
-              isDarkMode ? "bg-[#07070a]" : "bg-[#f4f5f7]"
-            }`}
+            className="fixed inset-0 z-[100] flex flex-col items-center justify-center transition-all duration-300"
+            style={{
+              backgroundColor: "var(--bg-color)",
+              backgroundImage: "var(--bg-gradient)"
+            }}
           >
             {/* Splash Background Graphic */}
             <div 
@@ -334,9 +342,9 @@ export default function App() {
             />
             
             {/* Decorative Glow inside Splash */}
-            <div className={`absolute top-[20%] left-[50%] translate-x-[-50%] w-[90%] max-w-[400px] aspect-square rounded-full pointer-events-none blur-[120px] ${
-              isDarkMode ? "bg-[#D4AF37] opacity-[0.08]" : "bg-[#D4AF37] opacity-[0.1]"
-            }`}></div>
+            {isDarkMode && (
+              <div className="absolute top-[20%] left-[50%] translate-x-[-50%] w-[90%] max-w-[400px] aspect-square rounded-full pointer-events-none blur-[120px] bg-[#D4AF37] opacity-[0.08]"></div>
+            )}
 
             <motion.div
               initial={{ opacity: 0, y: 20 }}
@@ -348,7 +356,13 @@ export default function App() {
                 animate={{ scale: [1, 1.03, 1] }}
                 transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
               >
-                <img src={logoImg} alt="Icona Logo" className="w-[180px] sm:w-[220px] h-auto drop-shadow-2xl mb-8" />
+                <img 
+                  src={logoImg} 
+                  alt="Icona Logo" 
+                  className="w-[180px] sm:w-[220px] h-auto drop-shadow-2xl mb-8" 
+                  style={{ contentVisibility: "auto" }}
+                  decoding="async"
+                />
               </motion.div>
               
               <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold tracking-tight max-w-lg mb-8 drop-shadow-sm" style={{ color: '#D4AF37' }}>
@@ -385,6 +399,8 @@ export default function App() {
               src={logoImg} 
               alt="Icona Logo" 
               className="h-8 sm:h-9 w-auto object-contain select-none" 
+              style={{ contentVisibility: "auto" }}
+              decoding="async"
               referrerPolicy="no-referrer" 
             />
             <span className="font-bold text-base sm:text-lg tracking-wider font-display text-[#D4AF37]">
@@ -453,12 +469,12 @@ export default function App() {
       >
         <div className={`w-full max-w-[640px] relative flex flex-col mx-auto my-auto shrink-0 py-4 sm:py-8`}>
           {/* Background Decorative Glow Elements */}
-          <div className={`absolute top-[-10%] left-[-10%] w-[80%] max-w-[500px] aspect-square rounded-full pointer-events-none blur-[120px] transition-all duration-300 ${
-            isDarkMode ? "bg-[#D4AF37] opacity-[0.04]" : "bg-[#D4AF37] opacity-[0.08]"
-          }`}></div>
-          <div className={`absolute bottom-[-10%] right-[10%] w-[70%] max-w-[400px] aspect-square rounded-full pointer-events-none blur-[100px] transition-all duration-300 ${
-            isDarkMode ? "bg-white opacity-[0.02]" : "bg-white opacity-[0.05]"
-          }`}></div>
+          {isDarkMode && (
+            <>
+              <div className="absolute top-[-10%] left-[-10%] w-[80%] max-w-[500px] aspect-square rounded-full pointer-events-none blur-[120px] transition-all duration-300 bg-[#D4AF37] opacity-[0.05]"></div>
+              <div className="absolute bottom-[-10%] right-[10%] w-[70%] max-w-[400px] aspect-square rounded-full pointer-events-none blur-[100px] transition-all duration-300 bg-white opacity-[0.02]"></div>
+            </>
+          )}
 
           {/* Main Container */}
           <div className={`w-full min-h-[460px] rounded-[24px] sm:rounded-[32px] border shadow-2xl relative flex flex-col overflow-hidden z-10 transition-all duration-300 ${
@@ -496,6 +512,8 @@ export default function App() {
                     src={logoImg} 
                     alt="Icona Logo" 
                     className="h-24 sm:h-28 w-auto object-contain select-none drop-shadow-[0_8px_24px_rgba(212,175,55,0.18)] hover:scale-105 transition-transform duration-300"
+                    style={{ contentVisibility: "auto" }}
+                    decoding="async"
                     referrerPolicy="no-referrer" 
                   />
                 </div>
@@ -612,6 +630,8 @@ export default function App() {
                     src={logoImg} 
                     alt="Icona Logo" 
                     className="h-24 sm:h-28 w-auto object-contain select-none drop-shadow-[0_8px_24px_rgba(212,175,55,0.18)] hover:scale-105 transition-transform duration-300"
+                    style={{ contentVisibility: "auto" }}
+                    decoding="async"
                     referrerPolicy="no-referrer" 
                   />
                 </div>
