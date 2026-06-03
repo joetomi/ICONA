@@ -13,7 +13,8 @@ import {
   HelpCircle,
   Activity,
   Moon,
-  Sun
+  Sun,
+  Check
 } from "lucide-react";
 import { translations } from "./translations";
 import { Language, UserSessionData } from "./types";
@@ -132,6 +133,7 @@ export default function App() {
   const [usernameInput, setUsernameInput] = useState("");
   const [passwordInput, setPasswordInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [isLoggingInSuccess, setIsLoggingInSuccess] = useState(false);
   const [statusMessage, setStatusMessage] = useState("");
   const [errorText, setErrorText] = useState("");
 
@@ -293,14 +295,19 @@ export default function App() {
       const data = await res.json();
 
       if (res.ok && data.success) {
-        setSession({
+        setIsLoggingInSuccess(true);
+        const finalSession = {
           token: data.token,
           username: data.username,
           balance: data.balance
-        });
-        setStatusMessage("");
-        setUsernameInput("");
-        setPasswordInput("");
+        };
+        setTimeout(() => {
+          setSession(finalSession);
+          setIsLoggingInSuccess(false);
+          setStatusMessage("");
+          setUsernameInput("");
+          setPasswordInput("");
+        }, 3200);
       } else {
         const errorMsg = lang === "ar" ? data.message_ar : data.message_en;
         setErrorText(errorMsg || t.connectionError);
@@ -637,7 +644,61 @@ export default function App() {
         {/* Content Body */}
         <div className="relative z-10 flex-1 p-4 sm:p-8 flex flex-col justify-center">
           <AnimatePresence mode="wait">
-            {!session ? (
+            {isLoggingInSuccess ? (
+              /* ========================================================
+                 SUCCESS TRANSITION VIEW (1 SECOND)
+                 ======================================================== */
+              <motion.div
+                key="success-view"
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, y: -10, scale: 1.02 }}
+                transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+                className="w-full max-w-sm mx-auto flex flex-col items-center justify-center py-12 space-y-6 text-center"
+              >
+                <div className="relative flex items-center justify-center">
+                  {/* Glowing background circles */}
+                  <motion.div 
+                    initial={{ scale: 0.8, opacity: 0 }}
+                    animate={{ scale: [1, 1.4, 1.6], opacity: [0.5, 0.2, 0] }}
+                    transition={{ repeat: Infinity, duration: 1.4, ease: "easeOut" }}
+                    className="absolute w-24 h-24 rounded-full bg-[#D4AF37]/20 border border-[#D4AF37]/40 pointer-events-none"
+                  />
+                  <motion.div 
+                    initial={{ scale: 0.6, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    className="w-20 h-20 rounded-full bg-[#D4AF37]/10 border border-[#D4AF37]/30 flex items-center justify-center text-[#D4AF37] relative z-10 shadow-[0_0_30px_rgba(212,175,55,0.2)]"
+                  >
+                    <motion.div
+                      initial={{ scale: 0, rotate: -45 }}
+                      animate={{ scale: 1, rotate: 0 }}
+                      transition={{ delay: 0.1, type: "spring", stiffness: 300, damping: 20 }}
+                    >
+                      <Check className="w-10 h-10 stroke-[3]" />
+                    </motion.div>
+                  </motion.div>
+                </div>
+
+                <div className="space-y-4">
+                  <motion.h3
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.15, duration: 0.5 }}
+                    className="text-2xl font-black text-[#D4AF37]"
+                  >
+                    {lang === "ar" ? "تم تسجيل الدخول بنجاح" : "Success!"}
+                  </motion.h3>
+                  <motion.p
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.25, duration: 0.5 }}
+                    className={`text-sm tracking-wide ${isDarkMode ? "text-slate-300" : "text-slate-600"}`}
+                  >
+                    {lang === "ar" ? "جاري تحويلك إلى لوحة التحكم..." : "Redirecting you to dashboard..."}
+                  </motion.p>
+                </div>
+              </motion.div>
+            ) : !session ? (
               /* ========================================================
                  LOGIN / AUTHENTICATION INTERFACE
                  ======================================================== */
@@ -761,10 +822,10 @@ export default function App() {
                  ======================================================== */
               <motion.div
                 key="dashboard-view"
-                initial={{ opacity: 0, scale: 0.99 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.99 }}
-                transition={{ duration: 0.25 }}
+                initial={{ opacity: 0, scale: 0.96, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.96, y: -20 }}
+                transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
                 className="space-y-8 text-center animate-fade-in"
               >
                 {/* Large Centered Logo on Dashboard */}
