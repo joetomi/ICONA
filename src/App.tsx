@@ -18,7 +18,9 @@ import {
 import { translations } from "./translations";
 import { Language, UserSessionData } from "./types";
 // @ts-ignore
-import logoImg from "./logo-removebg.png";
+import logoImg from "./full-logo.png";
+// @ts-ignore
+import logoRemoveBg from "./logo-removebg.png";
 // @ts-ignore
 import bkgImg from "./icona_bkg.png";
 
@@ -133,6 +135,81 @@ export default function App() {
   const [statusMessage, setStatusMessage] = useState("");
   const [errorText, setErrorText] = useState("");
 
+  // Dynamically process logo to remove solid black background and split it into Emblem & Text
+  const [processedLogo, setProcessedLogo] = useState<string>(logoImg);
+  const [processedEmblem, setProcessedEmblem] = useState<string>("");
+  const [processedText, setProcessedText] = useState<string>("");
+
+  useEffect(() => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.src = logoImg;
+    img.onload = () => {
+      try {
+        const width = img.naturalWidth || img.width;
+        const height = img.naturalHeight || img.height;
+
+        // Base division point: Emblem resides on the left (about 37% of width)
+        const splitX = Math.round(width * 0.37);
+
+        // 1. Process full logo (removed black background, paint everything beautiful gold)
+        const canvasFull = document.createElement("canvas");
+        canvasFull.width = width;
+        canvasFull.height = height;
+        const ctxFull = canvasFull.getContext("2d");
+        if (ctxFull) {
+          ctxFull.drawImage(img, 0, 0);
+          const imgData = ctxFull.getImageData(0, 0, width, height);
+          const dFull = imgData.data;
+          
+          for (let i = 0; i < dFull.length; i += 4) {
+            const r = dFull[i];
+            const g = dFull[i + 1];
+            const b = dFull[i + 2];
+            const avg = (r + g + b) / 3;
+            // Transparentize black/dark backgrounds smoothly
+            if (avg < 45) {
+              dFull[i + 3] = 0;
+            } else {
+              // Unify to exquisite Gold (#D4AF37)
+              dFull[i] = 212;
+              dFull[i + 1] = 175;
+              dFull[i + 2] = 55;
+            }
+          }
+          ctxFull.putImageData(imgData, 0, 0);
+          setProcessedLogo(canvasFull.toDataURL("image/png"));
+        }
+
+        // 2. Create emblem canvas (Left 37%) - painted gold
+        const canvasEmblem = document.createElement("canvas");
+        canvasEmblem.width = splitX;
+        canvasEmblem.height = height;
+        const ctxEmblem = canvasEmblem.getContext("2d");
+        if (ctxEmblem && ctxFull) {
+          ctxEmblem.drawImage(canvasFull, 0, 0, splitX, height, 0, 0, splitX, height);
+          setProcessedEmblem(canvasEmblem.toDataURL("image/png"));
+        }
+
+        // 3. Create text canvas (Right 63%) - painted gold
+        const canvasText = document.createElement("canvas");
+        const textWidth = width - splitX;
+        canvasText.width = textWidth;
+        canvasText.height = height;
+        const ctxText = canvasText.getContext("2d");
+        if (ctxText && ctxFull) {
+          ctxText.drawImage(canvasFull, splitX, 0, textWidth, height, 0, 0, textWidth, height);
+          setProcessedText(canvasText.toDataURL("image/png"));
+        }
+      } catch (err) {
+        console.error("Canvas rendering error, fallback to default", err);
+      }
+    };
+    img.onerror = () => {
+      console.warn("Could not load logoImg for canvas processing");
+    };
+  }, []);
+
   // Splash screen state
   const [showSplash, setShowSplash] = useState(true);
 
@@ -221,7 +298,7 @@ export default function App() {
           username: data.username,
           balance: data.balance
         });
-        setStatusMessage(t.updatedStatus);
+        setStatusMessage("");
         setUsernameInput("");
         setPasswordInput("");
       } else {
@@ -323,6 +400,7 @@ export default function App() {
         {showSplash && (
           <motion.div
             key="splash"
+            dir="ltr"
             initial={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 1.05 }}
             transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
@@ -352,22 +430,87 @@ export default function App() {
               transition={{ delay: 0.2, duration: 0.8 }}
               className="z-10 flex flex-col items-center px-6 text-center"
             >
-              <motion.div
-                animate={{ scale: [1, 1.03, 1] }}
-                transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
-              >
-                <img 
-                  src={logoImg} 
-                  alt="Icona Logo" 
-                  className="w-[180px] sm:w-[220px] h-auto drop-shadow-2xl mb-8" 
-                  style={{ contentVisibility: "auto" }}
-                  decoding="async"
+              <div className="relative w-[320px] sm:w-[460px] aspect-[2340/1080] mb-12 select-none flex items-center justify-center">
+                {/* 1. Golden Emblem Container (Left Part) */}
+                <motion.div 
+                  initial={{ scale: 0.8, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  transition={{ duration: 1.2, ease: [0.16, 1, 0.3, 1] }}
+                  className="relative z-20 shrink-0 select-none pointer-events-none"
+                  style={{
+                    width: "37%",
+                    height: "100%"
+                  }}
+                >
+                  {processedEmblem ? (
+                    <img 
+                      src={processedEmblem} 
+                      alt="Icona Logo Icon" 
+                      className="w-full h-full object-contain filter drop-shadow-[0_4px_28px_rgba(212,175,55,0.7)]"
+                      style={{ contentVisibility: "auto" }}
+                      decoding="async"
+                    />
+                  ) : (
+                    <div className="w-full h-full animate-pulse bg-amber-500/10 rounded-lg" />
+                  )}
+                </motion.div>
+
+                {/* 2. Text Slide Out Mask Container (Right Part) */}
+                <div 
+                  className="relative z-10 overflow-hidden flex items-center justify-start"
+                  style={{
+                    width: "63%",
+                    height: "100%"
+                  }}
+                >
+                  {/* The sliding gold text image */}
+                  <motion.div
+                    initial={{ x: "-100%", opacity: 0 }}
+                    animate={{ x: "0%", opacity: 1 }}
+                    transition={{ delay: 0.8, duration: 1.8, ease: [0.16, 1, 0.3, 1] }}
+                    className="w-full h-full filter drop-shadow-[0_2px_16px_rgba(212,175,55,0.4)] select-none pointer-events-none"
+                  >
+                    {processedText ? (
+                      <img 
+                        src={processedText} 
+                        alt="Icona Logo Text" 
+                        className="w-full h-full object-contain"
+                        style={{ contentVisibility: "auto" }}
+                        decoding="async"
+                      />
+                    ) : (
+                      <div className="w-full h-full animate-pulse bg-white/5 rounded-lg" />
+                    )}
+                  </motion.div>
+                </div>
+
+                {/* 3. Golden Laser/Sweep Boundary Line that moves as the text is revealed */}
+                <motion.div
+                  initial={{ left: "37%", opacity: 0, scaleY: 0 }}
+                  animate={{ 
+                    left: ["37%", "37%", "100%"], 
+                    opacity: [0, 1, 1, 0],
+                    scaleY: [0, 1, 1, 0]
+                  }}
+                  transition={{ 
+                    delay: 0.75, 
+                    duration: 1.85, 
+                    times: [0, 0.05, 0.95, 1],
+                    ease: [0.16, 1, 0.3, 1] 
+                  }}
+                  className="absolute top-[5%] bottom-[5%] w-[4px] bg-gradient-to-b from-amber-300 via-[#D4AF37] to-amber-500 shadow-[0_0_20px_rgba(212,175,55,1),_0_0_8px_rgba(212,175,55,0.8)] pointer-events-none z-30"
                 />
-              </motion.div>
+              </div>
               
-              <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold tracking-tight max-w-lg mb-8 drop-shadow-sm" style={{ color: '#D4AF37' }}>
+              <motion.h1 
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 1.4, duration: 0.8 }}
+                className="text-2xl sm:text-3xl lg:text-4xl font-bold tracking-tight max-w-lg mb-8 drop-shadow-sm" 
+                style={{ color: '#D4AF37' }}
+              >
                 مرحباً بك في بوابة ايقونة للمستخدمين
-              </h1>
+              </motion.h1>
               
               {/* Animated Progress Bar */}
               <div 
@@ -396,7 +539,7 @@ export default function App() {
           <div className="flex items-center gap-2.5 shrink-0">
             <span className={`w-3 h-3 rounded-full ${loading ? "bg-amber-500 animate-ping" : "bg-[#D4AF37] animate-pulse"}`} />
             <img 
-              src={logoImg} 
+              src={logoRemoveBg} 
               alt="Icona Logo" 
               className="h-8 sm:h-9 w-auto object-contain select-none" 
               style={{ contentVisibility: "auto" }}
@@ -509,9 +652,9 @@ export default function App() {
                 {/* Large Centered Logo */}
                 <div className="flex flex-col items-center justify-center">
                   <img 
-                    src={logoImg} 
+                    src={logoRemoveBg} 
                     alt="Icona Logo" 
-                    className="h-24 sm:h-28 w-auto object-contain select-none drop-shadow-[0_8px_24px_rgba(212,175,55,0.18)] hover:scale-105 transition-transform duration-300"
+                    className="h-24 sm:h-28 w-auto object-contain select-none drop-shadow-[0_8px_24px_rgba(212,175,55,0.22)] hover:scale-105 transition-transform duration-300"
                     style={{ contentVisibility: "auto" }}
                     decoding="async"
                     referrerPolicy="no-referrer" 
@@ -627,9 +770,9 @@ export default function App() {
                 {/* Large Centered Logo on Dashboard */}
                 <div className="flex flex-col items-center justify-center">
                   <img 
-                    src={logoImg} 
+                    src={logoRemoveBg} 
                     alt="Icona Logo" 
-                    className="h-24 sm:h-28 w-auto object-contain select-none drop-shadow-[0_8px_24px_rgba(212,175,55,0.18)] hover:scale-105 transition-transform duration-300"
+                    className="h-24 sm:h-28 w-auto object-contain select-none drop-shadow-[0_8px_24px_rgba(212,175,55,0.22)] hover:scale-105 transition-transform duration-300"
                     style={{ contentVisibility: "auto" }}
                     decoding="async"
                     referrerPolicy="no-referrer" 
@@ -767,19 +910,23 @@ export default function App() {
         </div>
 
         {/* Action Bottom Section / Refresh Button */}
-        <div className={`p-4 sm:p-6 border-t flex flex-col sm:flex-row items-center justify-between gap-4 transition-colors duration-300 ${
-          isDarkMode ? "border-white/5" : "border-slate-100"
-        }`}>
-          <div className="flex items-center gap-2">
-            <span className={`w-2 h-2 rounded-full ${loading ? "bg-amber-500 animate-pulse" : "bg-emerald-500"}`} />
-            <span className={`text-xs font-medium ${
-              isDarkMode ? "text-white/40" : "text-slate-500"
-            }`}>
-              {loading ? (statusMessage || t.refreshingStatus) : (statusMessage || t.updatedStatus)}
-            </span>
-          </div>
+        {session && (
+          <div className={`p-4 sm:p-6 border-t flex flex-col sm:flex-row items-center justify-between gap-4 transition-colors duration-300 ${
+            isDarkMode ? "border-white/5" : "border-slate-100"
+          }`}>
+            <div className="flex items-center gap-2">
+              {(statusMessage || loading) && (
+                <>
+                  <span className={`w-2 h-2 rounded-full ${loading ? "bg-amber-500 animate-pulse" : "bg-emerald-500"}`} />
+                  <span className={`text-xs font-medium ${
+                    isDarkMode ? "text-white/40" : "text-slate-500"
+                  }`}>
+                    {loading ? (statusMessage || t.refreshingStatus) : statusMessage}
+                  </span>
+                </>
+              )}
+            </div>
 
-          {session && (
             <button
               id="balance-refresh-action-btn"
               onClick={() => handleRefreshBalance()}
@@ -789,8 +936,8 @@ export default function App() {
               <span>{t.refreshButton}</span>
               <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
             </button>
-          )}
-        </div>
+          </div>
+        )}
 
       </div>
         </div>
