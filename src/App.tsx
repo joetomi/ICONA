@@ -857,29 +857,50 @@ export default function App() {
                   <p className={`text-xl sm:text-2xl font-black tracking-tight ${
                     isDarkMode ? "text-white" : "text-slate-800"
                   }`}>
-                    {t.remainingDataLabel}
+                    {session.balance.isUnlimited ? (t.unlimitedPackage || "باقة غير محدودة") : t.remainingDataLabel}
                   </p>
                 </div>
 
                 {/* Balance Big Typography */}
                 <div className="py-4 relative flex flex-col items-center justify-center">
-                  <div className="flex items-baseline gap-2.5">
-                    <span className={`text-6xl sm:text-8xl font-black font-sans tracking-tight ${
-                      isDarkMode ? "text-white animate-pulse" : "text-slate-900"
-                    }`}>
-                      {remaining_gb.toFixed(2)}
-                    </span>
-                    <span className="text-2xl sm:text-3xl font-light text-[#D4AF37] self-end mb-2">
-                      {t.gbLabel}
-                    </span>
-                  </div>
+                  {session.balance.isUnlimited ? (
+                    <div className="flex flex-col items-center justify-center">
+                      <span className={`text-4xl sm:text-6xl font-black font-sans tracking-tight ${
+                        isDarkMode ? "text-white animate-pulse" : "text-slate-900"
+                      }`}>
+                        {getExtractedEndDate(session.balance) || "---"}
+                      </span>
+                      <span className="text-xs sm:text-sm font-semibold tracking-wider text-[#D4AF37] mt-3 uppercase">
+                        {t.packageExpiry || "تاريخ انتهاء الباقة"}
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="flex items-baseline gap-2.5">
+                      <span className={`text-6xl sm:text-8xl font-black font-sans tracking-tight ${
+                        isDarkMode ? "text-white animate-pulse" : "text-slate-900"
+                      }`}>
+                        {remaining_gb.toFixed(2)}
+                      </span>
+                      <span className="text-2xl sm:text-3xl font-light text-[#D4AF37] self-end mb-2">
+                        {t.gbLabel}
+                      </span>
+                    </div>
+                  )}
 
-                  {/* MB conversion display */}
-                  <p className={`text-sm sm:text-base font-mono mt-4 font-bold ${
-                    isDarkMode ? "text-white/40" : "text-slate-500"
-                  }`}>
-                    {remaining_mb.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {t.mbLabel}
-                  </p>
+                  {/* Subtitle / mb or speed display */}
+                  {session.balance.isUnlimited ? (
+                    <p className={`text-base sm:text-lg font-mono mt-5 font-black tracking-wide ${
+                      isDarkMode ? "text-white/80" : "text-slate-700"
+                    }`}>
+                      {t.packageSpeed || "سرعة الباقة"}: <span className="text-[#D4AF37] font-black">{session.balance.speed || "10 Mbps"}</span>
+                    </p>
+                  ) : (
+                    <p className={`text-sm sm:text-base font-mono mt-4 font-bold ${
+                      isDarkMode ? "text-white/40" : "text-slate-500"
+                    }`}>
+                      {remaining_mb.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {t.mbLabel}
+                    </p>
+                  )}
                 </div>
 
                 {/* Additional Information Sub-panel */}

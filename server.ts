@@ -149,217 +149,266 @@ interface BalanceData {
   endDate?: string;
   nextPayment?: string;
   deposit?: string;
+  isUnlimited?: boolean;
+  speed?: string;
 }
 
 function parseBalance(html: string): BalanceData | null {
   if (!html) return null;
   
+  let finalBalance: BalanceData = {
+    remaining_mb: 0,
+    remaining_gb: 0,
+    isUnlimited: false
+  };
+
   // Tag match for table id="PREAPID_TRAFIC_"
   const tableRegex = /<table[^>]*id=["']PREAPID_TRAFIC_["'][^>]*>([\s\S]*?)<\/table>/i;
   const tableMatch = html.match(tableRegex);
-  if (!tableMatch) {
-    return null;
-  }
+  
+  let startDate = "";
+  let isUnlimitedPkg = true;
 
-  const tableContent = tableMatch[1];
+  if (tableMatch) {
+    const tableContent = tableMatch[1];
 
-  // Parse table headers to locate "Start Date" index
-  const thRegex = /<th[^>]*>([\s\S]*?)<\/th>/gi;
-  let thMatch;
-  const headers: string[] = [];
-  while ((thMatch = thRegex.exec(tableContent)) !== null) {
-    headers.push(thMatch[1].replace(/<[^>]*>/g, "").trim().toLowerCase());
-  }
-  const startDateColIndex = headers.indexOf("start date");
+    // Parse table headers to locate "Start Date" index
+    const thRegex = /<th[^>]*>([\s\S]*?)<\/th>/gi;
+    let thMatch;
+    const headers: string[] = [];
+    while ((thMatch = thRegex.exec(tableContent)) !== null) {
+      headers.push(thMatch[1].replace(/<[^>]*>/g, "").trim().toLowerCase());
+    }
+    const startDateColIndex = headers.indexOf("start date");
 
-  const tdRegex = /<td[^>]*>([\s\S]*?)<\/td>/gi;
-  let match;
-  const cells: string[] = [];
-  while ((match = tdRegex.exec(tableContent)) !== null) {
-    const cleanCell = match[1].replace(/<[^>]*>/g, "").trim();
-    cells.push(cleanCell);
-  }
+    const tdRegex = /<td[^>]*>([\s\S]*?)<\/td>/gi;
+    let match;
+    const cells: string[] = [];
+    while ((match = tdRegex.exec(tableContent)) !== null) {
+      const cleanCell = match[1].replace(/<[^>]*>/g, "").trim();
+      cells.push(cleanCell);
+    }
 
-  let finalBalance: BalanceData | null = null;
+    if (cells.length >= 8) {
+      const valStr = cells[6].replace(/,/g, ""); 
+      const remaining_mb = parseFloat(valStr);
+      if (!isNaN(remaining_mb)) {
+        isUnlimitedPkg = false;
+        finalBalance.remaining_mb = remaining_mb;
+        finalBalance.remaining_gb = remaining_mb / 1024;
+        finalBalance.isUnlimited = false;
 
-  // Cell index corresponding to original Python: cells[6] is MB
-  if (cells.length >= 8) {
-    const valStr = cells[6].replace(/,/g, ""); 
-    const remaining_mb = parseFloat(valStr);
-    if (!isNaN(remaining_mb)) {
-      const remaining_gb = remaining_mb / 1024;
-      finalBalance = {
-        remaining_mb,
-        remaining_gb
-      };
-      // Pull correct subscription start date from the traffic table matching <th>Start Date</th>
-      if (startDateColIndex !== -1 && cells.length > startDateColIndex) {
-        finalBalance.startDate = cells[startDateColIndex];
-      } else if (cells.length >= 5) {
-        finalBalance.startDate = cells[4];
-      }
-
-      // Parse end date by scanning active ranges like (2026-06-01-2026-06-30) or calculating +30 days
-      let parsedEndDate = "";
-      
-      // Look for a date in the next payment callout text (e.g. after 30 days 2026-06-30 or الأيام 2026-06-30)
-      const nextPaymentDateMatch = html.match(/(?:after\s+\d+\s+days|الأيام|periodic\s+payment\s+after\s+\d+\s+days)\s*(\d{4}-\d{2}-\d{2})/i);
-      if (nextPaymentDateMatch) {
-        parsedEndDate = nextPaymentDateMatch[1];
-      }
-
-      if (!parsedEndDate) {
-        const rangeMatch = html.match(/(\d{4}-\d{2}-\d{2})\s*[-—–]\s*(\d{4}-\d{2}-\d{2})/);
-        if (rangeMatch) {
-          parsedEndDate = rangeMatch[2];
-        } else if (finalBalance.startDate) {
-          try {
-            const sDate = new Date(finalBalance.startDate);
-            if (!isNaN(sDate.getTime())) {
-              sDate.setDate(sDate.getDate() + 30);
-              const yyyy = sDate.getFullYear();
-              const mm = String(sDate.getMonth() + 1).padStart(2, '0');
-              const dd = String(sDate.getDate()).padStart(2, '0');
-              parsedEndDate = `${yyyy}-${mm}-${dd}`;
-            }
-          } catch (e) {
-            console.error("Error calculating end date:", e);
-          }
+        // Pull correct subscription start date from the traffic table matching <th>Start Date</th>
+        if (startDateColIndex !== -1 && cells.length > startDateColIndex) {
+          startDate = cells[startDateColIndex];
+        } else if (cells.length >= 5) {
+          startDate = cells[4];
         }
-      }
-      if (parsedEndDate) {
-        finalBalance.endDate = parsedEndDate;
       }
     }
   }
 
-  if (finalBalance) {
-    try {
-      // 1. Zipped align scanning of text-1 (label) and text-2 (value) pairs in the page
-      const text1Regex = /class=["'][^"']*text-1[^"']*["'][^>]*>([\s\S]*?)<\/div>/gi;
-      const text2Regex = /class=["'][^"']*text-2[^"']*["'][^>]*>([\s\S]*?)<\/div>/gi;
+  if (isUnlimitedPkg) {
+    finalBalance.remaining_mb = -1;
+    finalBalance.remaining_gb = -1;
+    finalBalance.isUnlimited = true;
+  }
 
-      const allText1: string[] = [];
-      const allText2: string[] = [];
+  try {
+    // 1. Zipped align scanning of text-1 (label) and text-2 (value) pairs in the page
+    const text1Regex = /class=["'][^"']*text-1[^"']*["'][^>]*>([\s\S]*?)<\/div>/gi;
+    const text2Regex = /class=["'][^"']*text-2[^"']*["'][^>]*>([\s\S]*?)<\/div>/gi;
 
-      let m1;
-      while ((m1 = text1Regex.exec(html)) !== null) {
-        allText1.push(m1[1].replace(/<[^>]*>/g, "").trim().replace(/\s+/g, " "));
-      }
-      let m2;
-      while ((m2 = text2Regex.exec(html)) !== null) {
-        allText2.push(m2[1].replace(/<[^>]*>/g, "").trim().replace(/\s+/g, " "));
-      }
+    const allText1: string[] = [];
+    const allText2: string[] = [];
 
-      for (let i = 0; i < Math.min(allText1.length, allText2.length); i++) {
-        const label = allText1[i].toLowerCase();
-        const value = allText2[i];
-        if (!value) continue;
+    let m1;
+    while ((m1 = text1Regex.exec(html)) !== null) {
+      allText1.push(m1[1].replace(/<[^>]*>/g, "").trim().replace(/\s+/g, " "));
+    }
+    let m2;
+    while ((m2 = text2Regex.exec(html)) !== null) {
+      allText2.push(m2[1].replace(/<[^>]*>/g, "").trim().replace(/\s+/g, " "));
+    }
 
-        if (label.includes("firstname") || label.includes("lastname") || label.includes("اسم") || label.includes("фио") || label.includes("fio")) {
-          finalBalance.fullName = value;
-        } else if (label.includes("phone") || label.includes("هاتف")) {
-          finalBalance.phone = value.replace(/,\s*$/, "");
-        } else if (label.includes("address") || label.includes("عنوان")) {
-          finalBalance.address = value.replace(/\/\s*$/, "");
-        } else if (label.includes("status") || label.includes("حالة")) {
-          if (!finalBalance.status || value.toLowerCase() === "active" || value.includes("نشط")) {
-            finalBalance.status = value;
-          }
-        } else if (label.includes("contract date") || label.includes("activation") || label.includes("تاريخ العقد")) {
-          if (!finalBalance.startDate) {
-            finalBalance.startDate = value;
-          }
-        } else if (label.includes("deposit") || label.includes("رصيد")) {
-          const m = value.match(/[\d.]+/);
-          if (m) finalBalance.deposit = m[0];
-        }
-      }
+    for (let i = 0; i < Math.min(allText1.length, allText2.length); i++) {
+      const label = allText1[i].toLowerCase();
+      const value = allText2[i];
+      if (!value) continue;
 
-      // 2. Fallback robust regex loop in case zipping elements align shifts
-      const rowRegex = /<div[^>]*class=["'][^"']*text-1[^"']*["'][^>]*>([\s\S]*?)<\/div>\s*<div[^>]*class=["'][^"']*text-2[^"']*["'][^>]*>([\s\S]*?)<\/div>/gi;
-      let rowMatch;
-      while ((rowMatch = rowRegex.exec(html)) !== null) {
-        const label = rowMatch[1].replace(/<[^>]*>/g, "").trim().toLowerCase();
-        const value = rowMatch[2].replace(/<[^>]*>/g, "").trim().replace(/\s+/g, " ");
-
-        if ((label.includes("firstname") || label.includes("lastname")) && !finalBalance.fullName) {
-          finalBalance.fullName = value;
-        } else if (label.includes("phone") && !finalBalance.phone) {
-          finalBalance.phone = value.replace(/,\s*$/, "");
-        } else if (label.includes("address") && !finalBalance.address) {
-          finalBalance.address = value.replace(/\/\s*$/, "");
-        } else if (label.includes("status") && !finalBalance.status) {
+      if (label.includes("firstname") || label.includes("lastname") || label.includes("اسم") || label.includes("фио") || label.includes("fio")) {
+        finalBalance.fullName = value;
+      } else if (label.includes("phone") || label.includes("هاتف")) {
+        finalBalance.phone = value.replace(/,\s*$/, "");
+      } else if (label.includes("address") || label.includes("عنوان")) {
+        finalBalance.address = value.replace(/\/\s*$/, "");
+      } else if (label.includes("status") || label.includes("حالة")) {
+        if (!finalBalance.status || value.toLowerCase() === "active" || value.includes("نشط")) {
           finalBalance.status = value;
-        } else if ((label.includes("contract date") || label.includes("activation")) && !finalBalance.startDate) {
-          finalBalance.startDate = value;
-        } else if (label.includes("deposit") && !finalBalance.deposit) {
-          const m = value.match(/[\d.]+/);
-          if (m) finalBalance.deposit = m[0];
         }
-      }
-
-      // 3. Robust input-based CUSTOMER form scraper fallback
-      if (!finalBalance.fullName) {
-        const customerMatch = html.match(/name=["']CUSTOMER["']\s+value=["']([^"']+)["']/i) || 
-                              html.match(/value=["']([^"']+)["']\s+name=["']CUSTOMER["']/i);
-        if (customerMatch && customerMatch[1]) {
-          finalBalance.fullName = customerMatch[1].trim();
+      } else if (label.includes("contract date") || label.includes("activation") || label.includes("تاريخ العقد")) {
+        if (!startDate) {
+          startDate = value;
         }
+      } else if (label.includes("deposit") || label.includes("رصيد")) {
+        const m = value.match(/[\d.]+/);
+        if (m) finalBalance.deposit = m[0];
       }
-
-      // 4. Rus/Eng Rules message greeting fallback
-      if (!finalBalance.fullName) {
-        const uvažajemMatch = html.match(/Уважаемый,\s*<b>\s*([^<]+?)\s*<\/b>/i) || 
-                             html.match(/Dear,\s*<b>\s*([^<]+?)\s*<\/b>/i);
-        if (uvažajemMatch && uvažajemMatch[1]) {
-          finalBalance.fullName = uvažajemMatch[1].trim();
-        }
-      }
-
-      // 5. Hard regex search for Firstname, Lastname table
-      if (!finalBalance.fullName) {
-        const hardMatch = html.match(/(?:Firstname|Lastname|الاسم|ФИО)[\s\S]*?<div[^>]*class=["'][^"']*text-2[^"']*["'][^>]*>([\s\S]*?)<\/div>/i);
-        if (hardMatch) {
-          finalBalance.fullName = hardMatch[1].replace(/<[^>]*>/g, "").trim().replace(/\s+/g, " ");
-        }
-      }
-
-      // If status is still empty, search for Status Specifically
-      if (!finalBalance.status) {
-        const statusMatch = html.match(/Status<\/div>\s*<div[^>]+class=["'][^"']*text-2[^"']*["'][^>]*>([\s\S]*?)<\/div>/i);
-        if (statusMatch) {
-          finalBalance.status = statusMatch[1].replace(/<[^>]*>/g, "").trim();
-        }
-      }
-
-      // Parse next payment callout
-      // <div class="callout callout-success text-left" bis_skin_checked="1">
-      //   <h4> B-50G</h4>الدفعة التالية الدورية بعد 30 من الأيام<br>مجموع: 90.00</div>
-      const calloutRegex = /<div[^>]+class=["']/i; // Wait, let's use a more robust one
-      const specificCalloutRegex = /<div[^>]+class=["'][^"']*callout\s+callout-success[^"']*["'][^>]*>([\s\S]*?)(?:<\/div>|$)/i;
-      const calloutMatch = html.match(specificCalloutRegex);
-      if (calloutMatch) {
-        let calloutText = calloutMatch[1];
-        const h4Match = calloutText.match(/<h4[^>]*>([\s\S]*?)<\/h4>/i);
-        let plan = "";
-        if (h4Match) {
-          plan = h4Match[1].replace(/<[^>]*>/g, "").trim();
-          calloutText = calloutText.replace(/<h4[^>]*>[\s\S]*?<\/h4>/i, "");
-        }
-        const cleanLines = calloutText
-          .replace(/<br\s*\/?>/gi, "\n")
-          .replace(/<[^>]*>/g, "")
-          .split("\n")
-          .map(line => line.trim())
-          .filter(Boolean);
-        
-        const cleanText = cleanLines.join("\n");
-        finalBalance.nextPayment = plan ? `${plan}\n${cleanText}` : cleanText;
-      }
-    } catch (err) {
-      console.error("Error parsing additional details:", err);
     }
+
+    // 2. Fallback robust regex loop in case zipping elements align shifts
+    const rowRegex = /<div[^>]*class=["'][^"']*text-1[^"']*["'][^>]*>([\s\S]*?)<\/div>\s*<div[^>]*class=["'][^"']*text-2[^"']*["'][^>]*>([\s\S]*?)<\/div>/gi;
+    let rowMatch;
+    while ((rowMatch = rowRegex.exec(html)) !== null) {
+      const label = rowMatch[1].replace(/<[^>]*>/g, "").trim().toLowerCase();
+      const value = rowMatch[2].replace(/<[^>]*>/g, "").trim().replace(/\s+/g, " ");
+
+      if ((label.includes("firstname") || label.includes("lastname")) && !finalBalance.fullName) {
+        finalBalance.fullName = value;
+      } else if (label.includes("phone") && !finalBalance.phone) {
+        finalBalance.phone = value.replace(/,\s*$/, "");
+      } else if (label.includes("address") && !finalBalance.address) {
+        finalBalance.address = value.replace(/\/\s*$/, "");
+      } else if (label.includes("status") && !finalBalance.status) {
+        finalBalance.status = value;
+      } else if ((label.includes("contract date") || label.includes("activation")) && !startDate) {
+        startDate = value;
+      } else if (label.includes("deposit") && !finalBalance.deposit) {
+        const m = value.match(/[\d.]+/);
+        if (m) finalBalance.deposit = m[0];
+      }
+    }
+
+    // 3. Robust input-based CUSTOMER form scraper fallback
+    if (!finalBalance.fullName) {
+      const customerMatch = html.match(/name=["']CUSTOMER["']\s+value=["']([^"']+)["']/i) || 
+                            html.match(/value=["']([^"']+)["']\s+name=["']CUSTOMER["']/i);
+      if (customerMatch && customerMatch[1]) {
+        finalBalance.fullName = customerMatch[1].trim();
+      }
+    }
+
+    // 4. Rus/Eng Rules message greeting fallback
+    if (!finalBalance.fullName) {
+      const uvažajemMatch = html.match(/Уважаемый,\s*<b>\s*([^<]+?)\s*<\/b>/i) || 
+                           html.match(/Dear,\s*<b>\s*([^<]+?)\s*<\/b>/i);
+      if (uvažajemMatch && uvažajemMatch[1]) {
+        finalBalance.fullName = uvažajemMatch[1].trim();
+      }
+    }
+
+    // 5. Hard regex search for Firstname, Lastname table
+    if (!finalBalance.fullName) {
+      const hardMatch = html.match(/(?:Firstname|Lastname|الاسم|ФИО)[\s\S]*?<div[^>]*class=["'][^"']*text-2[^"']*["'][^>]*>([\s\S]*?)<\/div>/i);
+      if (hardMatch) {
+        finalBalance.fullName = hardMatch[1].replace(/<[^>]*>/g, "").trim().replace(/\s+/g, " ");
+      }
+    }
+
+    // If status is still empty, search for Status Specifically
+    if (!finalBalance.status) {
+      const statusMatch = html.match(/Status<\/div>\s*<div[^>]+class=["'][^"']*text-2[^"']*["'][^>]*>([\s\S]*?)<\/div>/i);
+      if (statusMatch) {
+        finalBalance.status = statusMatch[1].replace(/<[^>]*>/g, "").trim();
+      }
+    }
+
+    if (startDate) finalBalance.startDate = startDate;
+
+    // Parse end date by scanning active ranges like (2026-06-01-2026-06-30) or next payment date callout
+    let parsedEndDate = "";
+    const nextPaymentDateMatch = html.match(/(?:after\s+\d+\s+days|الأيام|periodic\s+payment\s+after\s+\d+\s+days)\s*(\d{4}-\d{2}-\d{2})/i);
+    if (nextPaymentDateMatch) {
+      parsedEndDate = nextPaymentDateMatch[1];
+    }
+
+    if (!parsedEndDate) {
+      const rangeMatch = html.match(/(\d{4}-\d{2}-\d{2})\s*[-—–]\s*(\d{4}-\d{2}-\d{2})/);
+      if (rangeMatch) {
+        parsedEndDate = rangeMatch[2];
+      } else if (startDate) {
+        try {
+          const sDate = new Date(startDate);
+          if (!isNaN(sDate.getTime())) {
+            sDate.setDate(sDate.getDate() + 30);
+            const yyyy = sDate.getFullYear();
+            const mm = String(sDate.getMonth() + 1).padStart(2, '0');
+            const dd = String(sDate.getDate()).padStart(2, '0');
+            parsedEndDate = `${yyyy}-${mm}-${dd}`;
+          }
+        } catch (e) {
+          console.error("Error calculating end date:", e);
+        }
+      }
+    }
+    if (parsedEndDate) {
+      finalBalance.endDate = parsedEndDate;
+    }
+
+    // Parse next payment callout
+    const specificCalloutRegex = /<div[^>]+class=["'][^"']*callout\s+callout-success[^"']*["'][^>]*>([\s\S]*?)(?:<\/div>|$)/i;
+    const calloutMatch = html.match(specificCalloutRegex);
+    let rawCalloutText = "";
+    if (calloutMatch) {
+      let calloutText = calloutMatch[1];
+      const h4Match = calloutText.match(/<h4[^>]*>([\s\S]*?)<\/h4>/i);
+      let plan = "";
+      if (h4Match) {
+        plan = h4Match[1].replace(/<[^>]*>/g, "").trim();
+        calloutText = calloutText.replace(/<h4[^>]*>[\s\S]*?<\/h4>/i, "");
+      }
+      const cleanLines = calloutText
+        .replace(/<br\s*\/?>/gi, "\n")
+        .replace(/<[^>]*>/g, "")
+        .split("\n")
+        .map(line => line.trim())
+        .filter(Boolean);
+      
+      const cleanText = cleanLines.join("\n");
+      rawCalloutText = plan ? `${plan}\n${cleanText}` : cleanText;
+      finalBalance.nextPayment = rawCalloutText;
+    }
+
+    // Speed parser
+    let speed = "";
+    if (rawCalloutText) {
+      // Find 10M, 15M, 20M, 10 Mbps etc.
+      const sMatch = rawCalloutText.match(/(\d+(?:\s*(?:Mbps|M|Mb\/s|ميجا|ميغابت|ميجابت|Gbps|G)))/gi);
+      if (sMatch && sMatch.length > 0) {
+        speed = sMatch[0];
+      }
+    }
+    if (!speed) {
+      const speedRegex = /(?:speed|السرعة|سرعة|shaping|rate\s+limit|bandwidth)[\s\S]*?<div[^>]*class=["'][^"']*text-2[^"']*["'][^>]*>([\s\S]*?)<\/div>/i;
+      const sMatch2 = html.match(speedRegex);
+      if (sMatch2) {
+        speed = sMatch2[1].replace(/<[^>]*>/g, "").trim();
+      }
+    }
+    if (!speed) {
+      const h4Match = html.match(/<h4[^>]*>([\s\S]*?)<\/h4>/i);
+      if (h4Match) {
+        const planName = h4Match[1].replace(/<[^>]*>/g, "").trim();
+        const planSpeedMatch = planName.match(/(\d+\s*(?:M|Mbps|Kbps|K|Mb\/s|G))/i);
+        if (planSpeedMatch) {
+          speed = planSpeedMatch[1];
+        } else {
+          speed = planName;
+        }
+      }
+    }
+    
+    // If we can't find and it is unlimited, default to showing a nice text
+    if (!speed && isUnlimitedPkg) {
+      speed = "10 Mbps"; // A standard default speed indicator for Icona unlimited packages
+    }
+    
+    if (speed) {
+      finalBalance.speed = speed;
+    }
+
+  } catch (err) {
+    console.error("Error parsing additional details:", err);
   }
 
   return finalBalance;

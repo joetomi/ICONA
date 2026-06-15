@@ -9,6 +9,8 @@ export interface BalanceData {
   endDate?: string;
   nextPayment?: string;
   deposit?: string;
+  isUnlimited?: boolean;
+  speed?: string;
 }
 
 export interface UserSessionData {
@@ -51,4 +53,7 @@ export interface TranslationSet {
   endDateLabel: string;
   nextPaymentLabel: string;
   depositLabel: string;
+  unlimitedPackage?: string;
+  packageSpeed?: string;
+  packageExpiry?: string;
 }
