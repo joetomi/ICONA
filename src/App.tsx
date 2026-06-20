@@ -14,7 +14,9 @@ import {
   Activity,
   Moon,
   Sun,
-  Check
+  Check,
+  Home,
+  Gauge
 } from "lucide-react";
 import { translations } from "./translations";
 import { Language, UserSessionData } from "./types";
@@ -98,14 +100,64 @@ const getExtractedEndDate = (balanceData: any): string => {
   if (!balanceData) return "";
   
   // Try to find a date like YYYY-MM-DD in nextPayment string first
+  let baseDate = "";
   if (balanceData.nextPayment) {
     const dateMatch = balanceData.nextPayment.match(/(\d{4}-\d{2}-\d{2})/);
     if (dateMatch) {
-      return dateMatch[1];
+      baseDate = dateMatch[1];
     }
   }
   
-  return balanceData.endDate || "";
+  if (!baseDate) {
+    baseDate = balanceData.endDate || "";
+  }
+
+  if (!baseDate) return "";
+
+  // If it is an unlimited package, calculate pre-paid extensions from deposit
+  if (balanceData.isUnlimited) {
+    const deposit = parseFloat(balanceData.deposit || "0");
+    const monthFee = parseFloat(balanceData.monthFee || "100.00");
+    
+    if (monthFee > 0 && deposit >= monthFee) {
+      const extraMonths = Math.floor(deposit / monthFee);
+      if (extraMonths > 0) {
+        try {
+          const parts = baseDate.split("-");
+          if (parts.length === 3) {
+            let year = parseInt(parts[0], 10);
+            let month = parseInt(parts[1], 10);
+            let day = parseInt(parts[2], 10);
+            
+            if (!isNaN(year) && !isNaN(month) && !isNaN(day)) {
+              month += extraMonths;
+              while (month > 12) {
+                month -= 12;
+                year += 1;
+              }
+              const mm = String(month).padStart(2, '0');
+              const dd = String(day).padStart(2, '0');
+              return `${year}-${mm}-${dd}`;
+            }
+          }
+        } catch (e) {
+          console.error("Error calculating extended prepaid next payment date:", e);
+        }
+      }
+    }
+  }
+  
+  return baseDate;
+};
+
+const getPrepaidMonths = (balanceData: any): number => {
+  if (!balanceData || !balanceData.isUnlimited) return 0;
+  const deposit = parseFloat(balanceData.deposit || "0");
+  const monthFee = parseFloat(balanceData.monthFee || "100.00");
+  if (monthFee > 0 && deposit >= monthFee) {
+    return Math.floor(deposit / monthFee);
+  }
+  return 0;
 };
 
 export default function App() {
@@ -136,6 +188,7 @@ export default function App() {
   const [isLoggingInSuccess, setIsLoggingInSuccess] = useState(false);
   const [statusMessage, setStatusMessage] = useState("");
   const [errorText, setErrorText] = useState("");
+  const [activeTab, setActiveTab] = useState<"home" | "details">("home");
 
   // Dynamically process logo to remove solid black background and split it into Emblem & Text
   const [processedLogo, setProcessedLogo] = useState<string>(logoImg);
@@ -374,6 +427,7 @@ export default function App() {
     setSession(null);
     setErrorText("");
     setStatusMessage("");
+    setActiveTab("home");
 
     if (currentToken) {
       try {
@@ -627,11 +681,15 @@ export default function App() {
           )}
 
           {/* Main Container */}
-          <div className={`w-full min-h-[460px] rounded-[24px] sm:rounded-[32px] border shadow-2xl relative flex flex-col overflow-hidden z-10 transition-all duration-300 ${
-            isDarkMode 
-              ? "bg-slate-950/40 backdrop-blur-[40px] border-white/10" 
-              : "bg-white/90 border-slate-200/80 shadow-[0_20px_50px_rgba(0,0,0,0.06)]"
-          }`}>
+          <motion.div 
+            layout="size"
+            transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+            className={`w-full min-h-[460px] rounded-[24px] sm:rounded-[32px] border shadow-2xl relative flex flex-col overflow-hidden z-10 ${
+              isDarkMode 
+                ? "bg-slate-950/40 backdrop-blur-[40px] border-white/10" 
+                : "bg-white/90 border-slate-200/80 shadow-[0_20px_50px_rgba(0,0,0,0.06)]"
+            }`}
+          >
             {/* Card Background Image (not for the back of the website) */}
         <div 
           className="absolute inset-0 pointer-events-none bg-cover bg-center z-0 transition-opacity duration-300"
@@ -826,154 +884,248 @@ export default function App() {
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.96, y: -20 }}
                 transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
-                className="space-y-8 text-center animate-fade-in"
+                className="space-y-8 text-center animate-fade-in relative"
               >
-                {/* Large Centered Logo on Dashboard */}
-                <div className="flex flex-col items-center justify-center">
-                  <img 
-                    src={logoRemoveBg} 
-                    alt="Icona Logo" 
-                    className="h-24 sm:h-28 w-auto object-contain select-none drop-shadow-[0_8px_24px_rgba(212,175,55,0.22)] hover:scale-105 transition-transform duration-300"
-                    style={{ contentVisibility: "auto" }}
-                    decoding="async"
-                    referrerPolicy="no-referrer" 
-                  />
-                </div>
+                {/* Elegant Top Bar: Logo (centered) & Navigation Tabs (aligned to top right corner matching screenshot) */}
+                <div className="relative flex items-center justify-between w-full h-16 mb-4 px-1">
+                  {/* Left Side: Spacer for symmetry */}
+                  <div className="w-24 shrink-0" />
 
-                {/* Simple greeting with zero noise */}
-                <div className="space-y-2">
-                  <h3 className={`text-base sm:text-lg tracking-wide font-medium ${
-                    isDarkMode ? "text-white/50" : "text-slate-500"
+                  {/* Centered Logo */}
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                    <img 
+                      src={logoRemoveBg} 
+                      alt="Icona Logo" 
+                      className="h-[68px] sm:h-[80px] w-auto object-contain select-none pointer-events-auto filter drop-shadow-[0_8px_16px_rgba(212,175,55,0.18)] hover:scale-105 transition-transform duration-300"
+                    />
+                  </div>
+
+                  {/* Right Side: Tab Buttons precisely placed in a beautiful custom segmented control */}
+                  <div className={`flex items-center gap-1 p-1 rounded-full border z-10 shrink-0 transition-colors duration-300 ${
+                    isDarkMode 
+                      ? "bg-black/30 border-white/5 shadow-[inset_0_1px_2px_rgba(255,255,255,0.03)]" 
+                      : "bg-slate-100 border-slate-200 shadow-[inset_0_1px_2px_rgba(0,0,0,0.01)]"
                   }`}>
-                    {lang === "ar" ? "مرحباً بك يا" : "Welcome,"} <span className="text-[#D4AF37] font-bold">{session.balance.fullName || session.username}</span>
-                  </h3>
-                  {session.balance.deposit && (
-                    <div className="text-center mt-2 mb-4">
-                      <span className={`text-lg sm:text-xl font-bold tracking-wide ${isDarkMode ? "text-[#D4AF37]" : "text-[#D4AF37]"}`}>
-                        {t.depositLabel}: <span className={isDarkMode ? "text-white" : "text-slate-800"}>{session.balance.deposit} {lang === "ar" ? "د.ل" : "LYD"}</span>
+                    {/* Home Tab Button */}
+                    <button
+                      onClick={() => setActiveTab("home")}
+                      className={`relative w-11 h-11 rounded-full flex items-center justify-center transition-all duration-300 cursor-pointer overflow-visible z-10 group`}
+                      title={lang === "ar" ? "الرئيسية" : "Home"}
+                    >
+                      {activeTab === "home" && (
+                        <motion.span
+                          layoutId="activeTabPill"
+                          className="absolute inset-0 bg-[#D4AF37] rounded-full shadow-[0_4px_20px_rgba(212,175,55,0.45)]"
+                          transition={{ type: "spring", stiffness: 380, damping: 28 }}
+                        />
+                      )}
+                      <span className={`relative z-10 transition-transform duration-300 group-hover:scale-105 ${
+                        activeTab === "home"
+                          ? "text-slate-950 font-bold"
+                          : isDarkMode
+                            ? "text-white/60 group-hover:text-white"
+                            : "text-slate-500 group-hover:text-slate-800"
+                      }`}>
+                        <Home className="w-5 h-5" />
                       </span>
-                    </div>
-                  )}
-                  <p className={`text-xl sm:text-2xl font-black tracking-tight ${
-                    isDarkMode ? "text-white" : "text-slate-800"
-                  }`}>
-                    {session.balance.isUnlimited ? (t.unlimitedPackage || "باقة غير محدودة") : t.remainingDataLabel}
-                  </p>
+                    </button>
+
+                    {/* Details Tab Button */}
+                    <button
+                      onClick={() => setActiveTab("details")}
+                      className={`relative w-11 h-11 rounded-full flex items-center justify-center transition-all duration-300 cursor-pointer overflow-visible z-10 group`}
+                      title={lang === "ar" ? "التفاصيل" : "Details"}
+                    >
+                      {activeTab === "details" && (
+                        <motion.span
+                          layoutId="activeTabPill"
+                          className="absolute inset-0 bg-[#D4AF37] rounded-full shadow-[0_4px_20px_rgba(212,175,55,0.45)]"
+                          transition={{ type: "spring", stiffness: 380, damping: 28 }}
+                        />
+                      )}
+                      <span className={`relative z-10 transition-transform duration-300 group-hover:scale-105 ${
+                        activeTab === "details"
+                          ? "text-slate-950 font-bold"
+                          : isDarkMode
+                            ? "text-white/60 group-hover:text-white"
+                            : "text-slate-500 group-hover:text-slate-800"
+                      }`}>
+                        <User className="w-5 h-5" />
+                      </span>
+                    </button>
+                  </div>
                 </div>
 
-                {/* Balance Big Typography */}
-                <div className="py-4 relative flex flex-col items-center justify-center">
-                  {session.balance.isUnlimited ? (
-                    <div className="flex flex-col items-center justify-center">
-                      <span className={`text-4xl sm:text-6xl font-black font-sans tracking-tight ${
-                        isDarkMode ? "text-white animate-pulse" : "text-slate-900"
-                      }`}>
-                        {getExtractedEndDate(session.balance) || "---"}
-                      </span>
-                      <span className="text-xs sm:text-sm font-semibold tracking-wider text-[#D4AF37] mt-3 uppercase">
-                        {t.packageExpiry || "تاريخ انتهاء الباقة"}
-                      </span>
-                    </div>
-                  ) : (
-                    <div className="flex items-baseline gap-2.5">
-                      <span className={`text-6xl sm:text-8xl font-black font-sans tracking-tight ${
-                        isDarkMode ? "text-white animate-pulse" : "text-slate-900"
-                      }`}>
-                        {remaining_gb.toFixed(2)}
-                      </span>
-                      <span className="text-2xl sm:text-3xl font-light text-[#D4AF37] self-end mb-2">
-                        {t.gbLabel}
-                      </span>
-                    </div>
-                  )}
-
-                  {/* Subtitle / mb or speed display */}
-                  {session.balance.isUnlimited ? (
-                    <p className={`text-base sm:text-lg font-mono mt-5 font-black tracking-wide ${
-                      isDarkMode ? "text-white/80" : "text-slate-700"
-                    }`}>
-                      {t.packageSpeed || "سرعة الباقة"}: <span className="text-[#D4AF37] font-black">{session.balance.speed || "10 Mbps"}</span>
-                    </p>
-                  ) : (
-                    <p className={`text-sm sm:text-base font-mono mt-4 font-bold ${
-                      isDarkMode ? "text-white/40" : "text-slate-500"
-                    }`}>
-                      {remaining_mb.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {t.mbLabel}
-                    </p>
-                  )}
-                </div>
-
-                {/* Additional Information Sub-panel */}
-                <div className={`p-4 sm:p-5 rounded-[20px] sm:rounded-[22px] border text-start space-y-4 transition-colors duration-300 ${
-                  isDarkMode 
-                    ? "bg-white/[0.02] border-white/5" 
-                    : "bg-slate-50/80 border-slate-100"
-                }`}>
-                  {/* Name field */}
-                  {session.balance.fullName && (
-                    <div className="flex flex-col sm:flex-row sm:justify-between items-start sm:items-center text-sm gap-1 sm:gap-0">
-                      <span className={isDarkMode ? "text-white/50" : "text-slate-400"}>{t.fullNameLabel}</span>
-                      <span className={`font-black text-start sm:text-end break-words w-full sm:w-auto ${isDarkMode ? "text-white/95" : "text-slate-800"}`}>{session.balance.fullName}</span>
-                    </div>
-                  )}
-
-                  {/* Phone field */}
-                  {session.balance.phone && (
-                    <div className="flex justify-between items-center text-sm">
-                      <span className={isDarkMode ? "text-white/50" : "text-slate-400"}>{t.phoneLabel}</span>
-                      <span className={`font-mono font-bold ${isDarkMode ? "text-white/95" : "text-slate-800"}`} dir="ltr">{session.balance.phone}</span>
-                    </div>
-                  )}
-
-                  {/* Address field */}
-                  {session.balance.address && (
-                    <div className="flex flex-col sm:flex-row sm:justify-between items-start sm:items-center text-sm gap-1 sm:gap-0">
-                      <span className={isDarkMode ? "text-white/50" : "text-slate-400"}>{t.addressLabel}</span>
-                      <span className={`font-black text-start sm:text-end break-words w-full sm:w-auto ${isDarkMode ? "text-white/95" : "text-slate-800"}`}>{session.balance.address}</span>
-                    </div>
-                  )}
-
-                  {/* Status field */}
-                  {session.balance.status && (
-                    <div className="flex justify-between items-center text-sm">
-                      <span className={isDarkMode ? "text-white/50" : "text-slate-400"}>{t.statusLabel}</span>
-                      <span className="px-3.5 py-1 rounded-full bg-emerald-500/10 text-emerald-400 text-xs font-black">
-                        {getTranslatedStatus(session.balance.status, lang)}
-                      </span>
-                    </div>
-                  )}
-
-                  {/* Start Date field */}
-                  {session.balance.startDate && (
-                    <div className="flex justify-between items-center text-sm">
-                      <span className={isDarkMode ? "text-white/50" : "text-slate-400"}>{t.startDateLabel}</span>
-                      <span className={`font-mono font-bold ${isDarkMode ? "text-white/95" : "text-slate-800"}`}>{session.balance.startDate}</span>
-                    </div>
-                  )}
-
-                  {/* End Date field */}
-                  {getExtractedEndDate(session.balance) && (
-                    <div className="flex justify-between items-center text-sm">
-                      <span className={isDarkMode ? "text-white/50" : "text-slate-400"}>{t.endDateLabel}</span>
-                      <span className={`font-mono font-bold ${isDarkMode ? "text-white/95" : "text-slate-800"}`}>{getExtractedEndDate(session.balance)}</span>
-                    </div>
-                  )}
-                  
-                  {/* Next Payment Callout Alert */}
-                  {session.balance.nextPayment && (
-                    <div className="pt-4 border-t border-dashed border-slate-200 dark:border-white/5 space-y-2">
-                      <div className="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-[#D4AF37]">
-                        <Activity className="w-4.5 h-4.5 animate-pulse" />
-                        <span>{t.nextPaymentLabel}</span>
+                <AnimatePresence mode="wait">
+                  {activeTab === "home" ? (
+                    <motion.div
+                      key="tab-home"
+                      initial={{ opacity: 0, scale: 0.98, y: 15, filter: "blur(4px)" }}
+                      animate={{ opacity: 1, scale: 1, y: 0, filter: "blur(0px)" }}
+                      exit={{ opacity: 0, scale: 0.98, y: -15, filter: "blur(4px)" }}
+                      transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+                      className="space-y-8"
+                    >
+                      {/* Simple greeting with zero noise */}
+                      <div className="space-y-2">
+                        <h3 className={`text-base sm:text-lg tracking-wide font-medium ${
+                          isDarkMode ? "text-white/50" : "text-slate-500"
+                        }`}>
+                          {lang === "ar" ? "مرحباً بك يا" : "Welcome,"} <span className="text-[#D4AF37] font-bold">{session.balance.fullName || session.username}</span>
+                        </h3>
+                        {session.balance.deposit && (
+                          <div className="text-center mt-2 mb-4">
+                            <span className={`text-lg sm:text-xl font-bold tracking-wide ${isDarkMode ? "text-[#D4AF37]" : "text-[#D4AF37]"}`}>
+                              {t.depositLabel}: <span className={isDarkMode ? "text-white" : "text-slate-800"}>{session.balance.deposit} {lang === "ar" ? "د.ل" : "LYD"}</span>
+                            </span>
+                          </div>
+                        )}
+                        <p className={`text-xl sm:text-2xl font-black tracking-tight ${
+                          isDarkMode ? "text-white" : "text-slate-800"
+                        }`}>
+                          {session.balance.isUnlimited ? (t.unlimitedPackage || "باقة غير محدودة") : t.remainingDataLabel}
+                        </p>
                       </div>
-                      <div className={`text-xs sm:text-sm leading-relaxed whitespace-pre-line font-bold ${
-                        isDarkMode ? "text-white/85" : "text-slate-700"
-                      }`}>
-                        {formatNextPayment(session.balance.nextPayment, lang)}
+
+                      {/* Balance Big Typography */}
+                      <div className="py-4 relative flex flex-col items-center justify-center">
+                        {session.balance.isUnlimited ? (
+                          <div className="flex flex-col items-center justify-center">
+                            <span className={`text-4xl sm:text-6xl font-black font-sans tracking-tight ${
+                              isDarkMode ? "text-white animate-pulse" : "text-slate-900"
+                            }`}>
+                              {getExtractedEndDate(session.balance) || "---"}
+                            </span>
+                            <span className="text-xs sm:text-sm font-semibold tracking-wider text-[#D4AF37] mt-3 uppercase">
+                              {t.packageExpiry || "تاريخ انتهاء الباقة"}
+                            </span>
+                            {getPrepaidMonths(session.balance) > 0 && (
+                              <span className="text-[11px] sm:text-[12px] font-bold px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 mt-3.5 text-center max-w-[90%] leading-relaxed border border-emerald-500/15 animate-pulse">
+                                📡 {lang === "ar" 
+                                  ? `تم التمديد تلقائياً لـ ${getPrepaidMonths(session.balance)} شهر إضافي من الرصيد المتاح`
+                                  : `Auto-extended by ${getPrepaidMonths(session.balance)} extra month(s) from available balance`
+                                }
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="flex items-baseline gap-2.5">
+                            <span className={`text-6xl sm:text-8xl font-black font-sans tracking-tight ${
+                              isDarkMode ? "text-white animate-pulse" : "text-slate-900"
+                            }`}>
+                              {remaining_gb.toFixed(2)}
+                            </span>
+                            <span className="text-2xl sm:text-3xl font-light text-[#D4AF37] self-end mb-2">
+                              {t.gbLabel}
+                            </span>
+                          </div>
+                        )}
+
+                        {/* Subtitle / mb or speed display */}
+                        {!session.balance.isUnlimited && (
+                          <p className={`text-sm sm:text-base font-mono mt-4 font-bold ${
+                            isDarkMode ? "text-white/40" : "text-slate-500"
+                          }`}>
+                            {remaining_mb.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {t.mbLabel}
+                          </p>
+                        )}
                       </div>
-                    </div>
+                    </motion.div>
+                  ) : (
+                    <motion.div
+                      key="tab-details"
+                      initial={{ opacity: 0, scale: 0.98, y: 15, filter: "blur(4px)" }}
+                      animate={{ opacity: 1, scale: 1, y: 0, filter: "blur(0px)" }}
+                      exit={{ opacity: 0, scale: 0.98, y: -15, filter: "blur(4px)" }}
+                      transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+                      className="space-y-6"
+                    >
+                      {/* Sub-header inside Account Details */}
+                      <div className="text-center space-y-1">
+                        <p className={`text-xs uppercase tracking-widest font-black ${isDarkMode ? "text-[#D4AF37]" : "text-slate-400"}`}>
+                          {lang === "ar" ? "بيانات الملف الشخصي" : "Subscriber Account Profile"}
+                        </p>
+                        <h4 className={`text-xl font-bold ${isDarkMode ? "text-white" : "text-slate-800"}`}>
+                          {session.balance.fullName || session.username}
+                        </h4>
+                      </div>
+
+                      {/* Additional Information Sub-panel */}
+                      <div className={`p-4 sm:p-5 rounded-[20px] sm:rounded-[22px] border text-start space-y-4 transition-colors duration-300 ${
+                        isDarkMode 
+                          ? "bg-white/[0.02] border-white/5" 
+                          : "bg-slate-50/80 border-slate-100"
+                      }`}>
+                        {/* Name field */}
+                        {session.balance.fullName && (
+                          <div className="flex flex-col sm:flex-row sm:justify-between items-start sm:items-center text-sm gap-1 sm:gap-0">
+                            <span className={isDarkMode ? "text-white/50" : "text-slate-400"}>{t.fullNameLabel}</span>
+                            <span className={`font-black text-start sm:text-end break-words w-full sm:w-auto ${isDarkMode ? "text-white/95" : "text-slate-800"}`}>{session.balance.fullName}</span>
+                          </div>
+                        )}
+
+                        {/* Phone field */}
+                        {session.balance.phone && (
+                          <div className="flex justify-between items-center text-sm">
+                            <span className={isDarkMode ? "text-white/50" : "text-slate-400"}>{t.phoneLabel}</span>
+                            <span className={`font-mono font-bold ${isDarkMode ? "text-white/95" : "text-slate-800"}`} dir="ltr">{session.balance.phone}</span>
+                          </div>
+                        )}
+
+                        {/* Address field */}
+                        {session.balance.address && (
+                          <div className="flex flex-col sm:flex-row sm:justify-between items-start sm:items-center text-sm gap-1 sm:gap-0">
+                            <span className={isDarkMode ? "text-white/50" : "text-slate-400"}>{t.addressLabel}</span>
+                            <span className={`font-black text-start sm:text-end break-words w-full sm:w-auto ${isDarkMode ? "text-white/95" : "text-slate-800"}`}>{session.balance.address}</span>
+                          </div>
+                        )}
+
+                        {/* Status field */}
+                        {session.balance.status && (
+                          <div className="flex justify-between items-center text-sm">
+                            <span className={isDarkMode ? "text-white/50" : "text-slate-400"}>{t.statusLabel}</span>
+                            <span className="px-3.5 py-1 rounded-full bg-emerald-500/10 text-emerald-400 text-xs font-black">
+                              {getTranslatedStatus(session.balance.status, lang)}
+                            </span>
+                          </div>
+                        )}
+
+                        {/* Start Date field */}
+                        {session.balance.startDate && (
+                          <div className="flex justify-between items-center text-sm">
+                            <span className={isDarkMode ? "text-white/50" : "text-slate-400"}>{t.startDateLabel}</span>
+                            <span className={`font-mono font-bold ${isDarkMode ? "text-white/95" : "text-slate-800"}`}>{session.balance.startDate}</span>
+                          </div>
+                        )}
+
+                        {/* End Date field */}
+                        {getExtractedEndDate(session.balance) && (
+                          <div className="flex justify-between items-center text-sm">
+                            <span className={isDarkMode ? "text-white/50" : "text-slate-400"}>{t.endDateLabel}</span>
+                            <span className={`font-mono font-bold ${isDarkMode ? "text-white/95" : "text-slate-800"}`}>{getExtractedEndDate(session.balance)}</span>
+                          </div>
+                        )}
+                        
+                        {/* Next Payment Callout Alert */}
+                        {session.balance.nextPayment && (
+                          <div className="pt-4 border-t border-dashed border-slate-200 dark:border-white/5 space-y-2">
+                            <div className="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-[#D4AF37]">
+                              <Activity className="w-4.5 h-4.5 animate-pulse" />
+                              <span>{t.nextPaymentLabel}</span>
+                            </div>
+                            <div className={`text-xs sm:text-sm leading-relaxed whitespace-pre-line font-bold ${
+                              isDarkMode ? "text-white/85" : "text-slate-700"
+                            }`}>
+                              {formatNextPayment(session.balance.nextPayment, lang).replace(/&nbsp;/gi, " ")}
+                            </div>
+                          </div>
+                        )}
+
+
+                      </div>
+                    </motion.div>
                   )}
-                </div>
+                </AnimatePresence>
 
                 {errorText && (
                   <motion.div 
@@ -1021,7 +1173,7 @@ export default function App() {
           </div>
         )}
 
-      </div>
+      </motion.div>
         </div>
       </main>
     </div>

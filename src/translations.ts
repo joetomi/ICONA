@@ -35,7 +35,7 @@ export const translations: Record<"ar" | "en", TranslationSet> = {
     depositLabel: "الرصيد",
     unlimitedPackage: "باقة غير محدودة",
     packageSpeed: "سرعة الباقة",
-    packageExpiry: "تاريخ انتهاء الباقة"
+    packageExpiry: "تاريخ الدفع القادم"
   },
   en: {
     title: "Welcome to Icona",
@@ -71,6 +71,6 @@ export const translations: Record<"ar" | "en", TranslationSet> = {
     depositLabel: "Deposit",
     unlimitedPackage: "Unlimited Package",
     packageSpeed: "Package Speed",
-    packageExpiry: "Package Expiry Date"
+    packageExpiry: "Next Payment Date"
   }
 };

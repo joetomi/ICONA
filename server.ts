@@ -122,6 +122,43 @@ async function fetchProfilePage(cookies: string[]) {
 }
 
 /**
+ * Fetch statistics data (qindex=100002&AJAX=1) using active cookies
+ */
+async function fetchStatsPage(cookies: string[]) {
+  try {
+    // We fetch the main index=44 page first to initialize state if required by some session tracking on the server
+    await axios.get(`${LOGIN_URL}?index=44`, {
+      httpsAgent,
+      headers: {
+        "User-Agent": USER_AGENT,
+        "Cookie": cookies.join("; "),
+        "Referer": LOGIN_URL
+      },
+      timeout: 10000,
+      validateStatus: () => true
+    });
+
+    // Fetch the AJAX statistics graph data
+    const statsRes = await axios.get(`${LOGIN_URL}?qindex=100002&AJAX=1`, {
+      httpsAgent,
+      headers: {
+        "User-Agent": USER_AGENT,
+        "Cookie": cookies.join("; "),
+        "Referer": `${LOGIN_URL}?index=44`,
+        "Accept": "application/json, text/javascript, */*; q=0.01",
+        "X-Requested-With": "XMLHttpRequest"
+      },
+      timeout: 15000,
+      validateStatus: () => true
+    });
+    return statsRes.data;
+  } catch (err) {
+    console.warn("Fetch Stats Error:", err);
+    return null;
+  }
+}
+
+/**
  * Helper to check login success
  */
 function verifyLoginSuccess(html: string): boolean {
@@ -151,6 +188,7 @@ interface BalanceData {
   deposit?: string;
   isUnlimited?: boolean;
   speed?: string;
+  monthFee?: string;
 }
 
 function parseBalance(html: string): BalanceData | null {
@@ -231,6 +269,9 @@ function parseBalance(html: string): BalanceData | null {
       allText2.push(m2[1].replace(/<[^>]*>/g, "").trim().replace(/\s+/g, " "));
     }
 
+    let contractDate = "";
+    let activationDate = "";
+
     for (let i = 0; i < Math.min(allText1.length, allText2.length); i++) {
       const label = allText1[i].toLowerCase();
       const value = allText2[i];
@@ -246,13 +287,16 @@ function parseBalance(html: string): BalanceData | null {
         if (!finalBalance.status || value.toLowerCase() === "active" || value.includes("نشط")) {
           finalBalance.status = value;
         }
-      } else if (label.includes("contract date") || label.includes("activation") || label.includes("تاريخ العقد")) {
-        if (!startDate) {
-          startDate = value;
-        }
+      } else if (label.includes("activation") || label.includes("تفعيل") || label.includes("بداية الاشتراك")) {
+        activationDate = value;
+      } else if (label.includes("contract date") || label.includes("تاريخ العقد")) {
+        contractDate = value;
       } else if (label.includes("deposit") || label.includes("رصيد")) {
         const m = value.match(/[\d.]+/);
         if (m) finalBalance.deposit = m[0];
+      } else if (label.includes("month fee") || label.includes("monthly fee") || label.includes("سعر الباقة") || label.includes("قيمة الاشتراك") || label.includes("رسوم الاشتراك") || label.includes("tarif plan fee")) {
+        const m = value.match(/[\d.]+/);
+        if (m) finalBalance.monthFee = m[0];
       }
     }
 
@@ -271,12 +315,22 @@ function parseBalance(html: string): BalanceData | null {
         finalBalance.address = value.replace(/\/\s*$/, "");
       } else if (label.includes("status") && !finalBalance.status) {
         finalBalance.status = value;
-      } else if ((label.includes("contract date") || label.includes("activation")) && !startDate) {
-        startDate = value;
+      } else if (label.includes("activation") || label.includes("تفعيل") || label.includes("بداية الاشتراك")) {
+        if (!activationDate) activationDate = value;
+      } else if (label.includes("contract date") || label.includes("تاريخ العقد")) {
+        if (!contractDate) contractDate = value;
       } else if (label.includes("deposit") && !finalBalance.deposit) {
         const m = value.match(/[\d.]+/);
         if (m) finalBalance.deposit = m[0];
+      } else if ((label.includes("month fee") || label.includes("monthly fee") || label.includes("سعر الباقة") || label.includes("قيمة الاشتراك") || label.includes("رسوم الاشتراك")) && !finalBalance.monthFee) {
+        const m = value.match(/[\d.]+/);
+        if (m) finalBalance.monthFee = m[0];
       }
+    }
+
+    const finalStart = activationDate || contractDate;
+    if (finalStart) {
+      startDate = finalStart;
     }
 
     // 3. Robust input-based CUSTOMER form scraper fallback
@@ -369,6 +423,26 @@ function parseBalance(html: string): BalanceData | null {
       finalBalance.nextPayment = rawCalloutText;
     }
 
+    if (!finalBalance.monthFee && rawCalloutText) {
+      const sumMatch = rawCalloutText.match(/(?:Sum|السعر|القيمة|قيمة|رسوم):\s*([\d.]+)/i);
+      if (sumMatch) {
+        finalBalance.monthFee = sumMatch[1];
+      }
+    }
+
+    if (!finalBalance.monthFee) {
+      const mFeeMatch = html.match(/(?:Month fee|رسوم الاشتراك|قيمة الاشتراك|سعر الاشتراك)[\s\S]*?<div[^>]*class=["'][^"']*text-2[^"']*["'][^>]*>([\s\S]*?)<\/div>/i);
+      if (mFeeMatch) {
+        const m = mFeeMatch[1].replace(/<[^>]*>/g, "").match(/[\d.]+/);
+        if (m) finalBalance.monthFee = m[0];
+      }
+    }
+
+    if (!finalBalance.monthFee) {
+      // Default to 100.00 LYD if we absolutely cannot parse it
+      finalBalance.monthFee = "100.00";
+    }
+
     // Speed parser
     let speed = "";
     if (rawCalloutText) {
@@ -404,6 +478,7 @@ function parseBalance(html: string): BalanceData | null {
     }
     
     if (speed) {
+      speed = speed.replace(/&nbsp;/gi, " ").replace(/&amp;/gi, "&").replace(/&sect;/gi, "").trim();
       finalBalance.speed = speed;
     }
 
@@ -412,6 +487,145 @@ function parseBalance(html: string): BalanceData | null {
   }
 
   return finalBalance;
+}
+
+/**
+ * Extracts all chart data or numeric series from the statistics page,
+ * finds the local peaks (apex values), and calculates their integer average.
+ */
+function extractAndCalculateStatsSpeed(htmlOrData: any): string | undefined {
+  if (!htmlOrData) return undefined;
+
+  let content = "";
+  let rawObj: any = null;
+
+  if (typeof htmlOrData === "object") {
+    rawObj = htmlOrData;
+    content = JSON.stringify(htmlOrData);
+  } else {
+    content = String(htmlOrData);
+    try {
+      rawObj = JSON.parse(content);
+    } catch (_) {
+      // Ignored
+    }
+  }
+
+  const numbers: number[] = [];
+
+  // If we successfully obtained a JSON object, traverse and extract all numbers
+  if (rawObj) {
+    const traverse = (val: any) => {
+      if (typeof val === "number") {
+        numbers.push(val);
+      } else if (Array.isArray(val)) {
+        if (val.length === 2 && typeof val[0] === "number" && typeof val[1] === "number" && val[0] > 1000000) {
+          // Typically [timestamp, speedMBps] or [x, y]
+          numbers.push(val[1]);
+        } else {
+          val.forEach(item => traverse(item));
+        }
+      } else if (val && typeof val === "object") {
+        Object.keys(val).forEach(key => traverse(val[key]));
+      }
+    };
+    traverse(rawObj);
+  }
+
+  // Also search for JSON arrays via regex inside strings (HTML/JavaScript containing Highcharts series data)
+  const arrayMatches = content.match(/\[\s*[\d.]+(?:\s*,\s*[\d.]+)*\s*\]/g);
+  if (arrayMatches) {
+    for (const arrStr of arrayMatches) {
+      try {
+        const parsed = JSON.parse(arrStr);
+        if (Array.isArray(parsed)) {
+          for (const item of parsed) {
+            if (typeof item === "number") {
+              numbers.push(item);
+            } else if (Array.isArray(item) && typeof item[1] === "number") {
+              numbers.push(item[1]);
+            }
+          }
+        }
+      } catch (e) {
+        // Fallback robust extraction for numbers inside brackets
+        const matches = arrStr.match(/[\d.]+/g);
+        if (matches) {
+          matches.forEach(m => {
+            const num = parseFloat(m);
+            if (!isNaN(num)) numbers.push(num);
+          });
+        }
+      }
+    }
+  }
+
+  // Fallback: If no numbers extracted, search for values associated with rates or y coordinate labels
+  if (numbers.length === 0) {
+    const rateMatches = content.match(/(?:rate|speed|kbps|mbps|val|value|y|data|point)[\s\S]{0,10}?([\d.]+)/gi);
+    if (rateMatches) {
+      rateMatches.forEach(m => {
+        const numMatch = m.match(/[\d.]+/);
+        if (numMatch) {
+          const num = parseFloat(numMatch[0]);
+          if (!isNaN(num) && num > 0) numbers.push(num);
+        }
+      });
+    }
+  }
+
+  // Filter out extremely low or inactive values (less than 0.1 Mbps) to focus on active usage peaks
+  let activeSpeeds = numbers.filter(n => n > 0.1);
+  if (activeSpeeds.length === 0) return undefined;
+
+  // Let's normalize high numbers if they represent bps or kbps
+  const tempAvg = activeSpeeds.reduce((a, b) => a + b, 0) / activeSpeeds.length;
+  if (tempAvg > 10000000) {
+    // scale down from bps to mbps
+    activeSpeeds = activeSpeeds.map(n => n / 1000000);
+  } else if (tempAvg > 10000) {
+    // scale down from kbps to mbps
+    activeSpeeds = activeSpeeds.map(n => n / 1000);
+  }
+
+  // Step 1: Sort the speeds ascending to determine percentile values
+  const sortedSpeeds = [...activeSpeeds].sort((a, b) => a - b);
+  const totalCount = sortedSpeeds.length;
+
+  // Step 2: Extract a robust high-percentile value (85th percentile) to represent max steady speed,
+  // completely ignoring top anomalies/single-point outliers (spikes)
+  const percentileIndex = Math.min(Math.floor(totalCount * 0.85), totalCount - 1);
+  const estimatedPeak = sortedSpeeds[percentileIndex];
+
+  // Step 3: Match the estimated peak to the nearest typical ISP package speed in Mbps
+  // Standard package speeds offered are generally: 4, 8, 10, 15, 20, 30, 40, 50, 60, 75, 80, 100, 150, 200, 300, 400, 500, 1000
+  const standardSpeeds = [4, 8, 10, 15, 20, 30, 40, 50, 60, 75, 80, 100, 150, 200, 300, 400, 500, 1000];
+
+  let bestMatch = standardSpeeds[0];
+  let minDiff = Math.abs(estimatedPeak - bestMatch);
+
+  for (const speed of standardSpeeds) {
+    const diff = Math.abs(estimatedPeak - speed);
+    if (diff < minDiff) {
+      minDiff = diff;
+      bestMatch = speed;
+    }
+  }
+
+  // If the closest standard speed has a reasonable difference (e.g., within 35% of standard speed value),
+  // we use the standard speed to present a clean, rounded package tier.
+  // Otherwise, we gracefully round the peak value to the nearest integer.
+  let finalSpeedValue = bestMatch;
+  if (minDiff > bestMatch * 0.35) {
+    finalSpeedValue = Math.round(estimatedPeak);
+  }
+
+  // Ensure it's a valid positive speed
+  if (finalSpeedValue <= 0) {
+    finalSpeedValue = 10; // safe default
+  }
+
+  return `${finalSpeedValue} Mbps`;
 }
 
 // API Endpoints
@@ -444,6 +658,8 @@ app.post("/api/login", async (req, res) => {
       message_en: "Failed to parse balance information from portal table."
     });
   }
+
+
 
   // Create active session
   const token = crypto.randomUUID();

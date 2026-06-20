@@ -11,6 +11,8 @@ export interface BalanceData {
   deposit?: string;
   isUnlimited?: boolean;
   speed?: string;
+  monthFee?: string;
+  calculatedSpeed?: string;
 }
 
 export interface UserSessionData {
