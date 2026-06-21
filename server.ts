@@ -189,6 +189,8 @@ interface BalanceData {
   isUnlimited?: boolean;
   speed?: string;
   monthFee?: string;
+  calculatedSpeed?: string;
+  speedAnalysis?: any;
 }
 
 function parseBalance(html: string): BalanceData | null {
@@ -405,12 +407,9 @@ function parseBalance(html: string): BalanceData | null {
     let rawCalloutText = "";
     if (calloutMatch) {
       let calloutText = calloutMatch[1];
-      const h4Match = calloutText.match(/<h4[^>]*>([\s\S]*?)<\/h4>/i);
-      let plan = "";
-      if (h4Match) {
-        plan = h4Match[1].replace(/<[^>]*>/g, "").trim();
-        calloutText = calloutText.replace(/<h4[^>]*>[\s\S]*?<\/h4>/i, "");
-      }
+      // Completely discard any <h4>...</h4> elements to avoid displaying package symbols/codes (like HU-100 or others)
+      calloutText = calloutText.replace(/<h4[^>]*>[\s\S]*?<\/h4>/gi, "");
+      
       const cleanLines = calloutText
         .replace(/<br\s*\/?>/gi, "\n")
         .replace(/<[^>]*>/g, "")
@@ -418,8 +417,18 @@ function parseBalance(html: string): BalanceData | null {
         .map(line => line.trim())
         .filter(Boolean);
       
-      const cleanText = cleanLines.join("\n");
-      rawCalloutText = plan ? `${plan}\n${cleanText}` : cleanText;
+      let cleanText = cleanLines.join("\n");
+      cleanText = cleanText.split("\n")
+        .map(line => line.replace(/hu[-_ ]?100/gi, "").trim())
+        .filter(Boolean)
+        .join("\n");
+
+      rawCalloutText = cleanText;
+      // Completely strip occurrences of hu-100/hu100
+      rawCalloutText = rawCalloutText.split("\n")
+        .map(line => line.replace(/hu[-_ ]?100/gi, "").trim())
+        .filter(Boolean)
+        .join("\n");
       finalBalance.nextPayment = rawCalloutText;
     }
 
@@ -479,7 +488,11 @@ function parseBalance(html: string): BalanceData | null {
     
     if (speed) {
       speed = speed.replace(/&nbsp;/gi, " ").replace(/&amp;/gi, "&").replace(/&sect;/gi, "").trim();
-      finalBalance.speed = speed;
+      // Remove "hu-100" or variants case-insensitively as requested by user
+      speed = speed.replace(/hu[-_ ]?100/gi, "").replace(/h[-_ ]?100/gi, "").trim();
+      // Clean up any remaining double spaces, leading/trailing hyphens, underscores or slashes
+      speed = speed.replace(/^[-_/\s]+|[-_/\s]+$/g, "").replace(/\s+/g, " ").trim();
+      finalBalance.speed = speed || "10 Mbps";
     }
 
   } catch (err) {
@@ -493,8 +506,21 @@ function parseBalance(html: string): BalanceData | null {
  * Extracts all chart data or numeric series from the statistics page,
  * finds the local peaks (apex values), and calculates their integer average.
  */
-function extractAndCalculateStatsSpeed(htmlOrData: any): string | undefined {
-  if (!htmlOrData) return undefined;
+function analyzeHighchartsSpeed(htmlOrData: any): any {
+  const defaultAnalysis = {
+    expectedPackage: "10 Mbps",
+    confidence: 60,
+    peakSpeed: "---",
+    avgPeakSpeed: "---",
+    p95Speed: "---",
+    p98Speed: "---",
+    mostFrequentPeak: "---",
+    reason: "لا توجد بيانات كافية في الرسم البياني لتحديد السرعة بشكل مطلع لعدم وجود استهلاك نشط كافٍ على الخط.",
+    warning: "تحذير: البيانات المسترجعة من الرسم البياني غير كافية أو فارغة للتحليل.",
+    chartDataFound: false
+  };
+
+  if (!htmlOrData) return defaultAnalysis;
 
   let content = "";
   let rawObj: any = null;
@@ -511,121 +537,291 @@ function extractAndCalculateStatsSpeed(htmlOrData: any): string | undefined {
     }
   }
 
-  const numbers: number[] = [];
+  // We will collect data points as { timestamp: number | null, value: number }
+  const dataPoints: { timestamp: number | null; value: number }[] = [];
 
-  // If we successfully obtained a JSON object, traverse and extract all numbers
+  // Helper to determine if a value is a valid timestamp
+  const isValidTimestampObj = (num: number): boolean => {
+    return typeof num === "number" && !isNaN(num) && num > 1000000;
+  };
+
+  // 1. Process JSON Object if available
   if (rawObj) {
     const traverse = (val: any) => {
-      if (typeof val === "number") {
-        numbers.push(val);
-      } else if (Array.isArray(val)) {
-        if (val.length === 2 && typeof val[0] === "number" && typeof val[1] === "number" && val[0] > 1000000) {
-          // Typically [timestamp, speedMBps] or [x, y]
-          numbers.push(val[1]);
+      if (Array.isArray(val)) {
+        if (val.length === 2 && typeof val[0] === "number" && typeof val[1] === "number") {
+          if (isValidTimestampObj(val[0])) {
+            dataPoints.push({ timestamp: val[0], value: val[1] });
+          } else {
+            dataPoints.push({ timestamp: null, value: val[1] });
+          }
         } else {
           val.forEach(item => traverse(item));
         }
       } else if (val && typeof val === "object") {
         Object.keys(val).forEach(key => traverse(val[key]));
+      } else if (typeof val === "number") {
+        dataPoints.push({ timestamp: null, value: val });
       }
     };
     traverse(rawObj);
   }
 
-  // Also search for JSON arrays via regex inside strings (HTML/JavaScript containing Highcharts series data)
-  const arrayMatches = content.match(/\[\s*[\d.]+(?:\s*,\s*[\d.]+)*\s*\]/g);
-  if (arrayMatches) {
-    for (const arrStr of arrayMatches) {
-      try {
-        const parsed = JSON.parse(arrStr);
-        if (Array.isArray(parsed)) {
-          for (const item of parsed) {
-            if (typeof item === "number") {
-              numbers.push(item);
-            } else if (Array.isArray(item) && typeof item[1] === "number") {
-              numbers.push(item[1]);
+  // 2. Regex search for [[timestamp, value], ...] combinations inside HTML/Javascript string
+  const tupleRegex = /\[\s*(\d{9,13})\s*,\s*([\d.]+)\s*\]/g;
+  let match;
+  while ((match = tupleRegex.exec(content)) !== null) {
+    const ts = parseInt(match[1], 10);
+    const val = parseFloat(match[2]);
+    if (!isNaN(ts) && !isNaN(val)) {
+      dataPoints.push({ timestamp: ts, value: val });
+    }
+  }
+
+  // Also match general arrays if nothing found by tuple regex
+  if (dataPoints.length === 0) {
+    const arrayMatches = content.match(/\[\s*[\d.]+(?:\s*,\s*[\d.]+)*\s*\]/g);
+    if (arrayMatches) {
+      for (const arrStr of arrayMatches) {
+        try {
+          const parsed = JSON.parse(arrStr);
+          if (Array.isArray(parsed)) {
+            for (const item of parsed) {
+              if (typeof item === "number") {
+                dataPoints.push({ timestamp: null, value: item });
+              } else if (Array.isArray(item) && typeof item[0] === "number" && typeof item[1] === "number") {
+                dataPoints.push({ timestamp: item[0] > 1000000 ? item[0] : null, value: item[1] });
+              } else if (Array.isArray(item) && typeof item[1] === "number") {
+                dataPoints.push({ timestamp: null, value: item[1] });
+              }
             }
           }
-        }
-      } catch (e) {
-        // Fallback robust extraction for numbers inside brackets
-        const matches = arrStr.match(/[\d.]+/g);
-        if (matches) {
-          matches.forEach(m => {
-            const num = parseFloat(m);
-            if (!isNaN(num)) numbers.push(num);
-          });
+        } catch (_) {
+          // Regex fallback
+          const matches = arrStr.match(/[\d.]+/g);
+          if (matches) {
+            matches.forEach(m => {
+              const num = parseFloat(m);
+              if (!isNaN(num)) dataPoints.push({ timestamp: null, value: num });
+            });
+          }
         }
       }
     }
   }
 
-  // Fallback: If no numbers extracted, search for values associated with rates or y coordinate labels
-  if (numbers.length === 0) {
+  // 3. Robust SVG path coordinates
+  const pathMatches = content.match(/d\s*=\s*['"]\s*M\s*[^'"]+['"]/gi);
+  if (pathMatches) {
+    pathMatches.forEach(pathStr => {
+      const coordTokens = pathStr.match(/[\d.]+/g);
+      if (coordTokens && coordTokens.length > 4) {
+        const yCoords: number[] = [];
+        for (let i = 1; i < coordTokens.length; i += 2) {
+          const y = parseFloat(coordTokens[i]);
+          if (!isNaN(y)) yCoords.push(y);
+        }
+        if (yCoords.length > 5) {
+          const maxY = Math.max(...yCoords);
+          const minY = Math.min(...yCoords);
+          const h = maxY - minY;
+          if (h > 10) {
+            yCoords.forEach(y => {
+              const norm = (maxY - y) / h;
+              dataPoints.push({ timestamp: null, value: norm * 50 });
+            });
+          }
+        }
+      }
+    });
+  }
+
+  // Find max timestamp in dataset to anchor our filter
+  let maxTimestamp = 0;
+  dataPoints.forEach(p => {
+    if (p.timestamp && p.timestamp > maxTimestamp) {
+      maxTimestamp = p.timestamp;
+    }
+  });
+
+  // Is maxTimestamp present? Let's check if it's seconds or milliseconds
+  let isMs = false;
+  if (maxTimestamp > 100000000000) {
+    isMs = true;
+  }
+
+  const fiveHoursInterval = 5 * 60 * 60 * 1000; // 5 hours in ms
+  const fiveHoursIntervalSec = 5 * 60 * 60; // 5 hours in seconds
+
+  const filterThreshold = isMs 
+    ? maxTimestamp - fiveHoursInterval 
+    : maxTimestamp - fiveHoursIntervalSec;
+
+  // Filter data points:
+  // - If it has a timestamp, it MUST be >= filterThreshold (within the last 5 hours of the latest data point).
+  // - If it does NOT have a timestamp, we keep it.
+  let filteredPoints = dataPoints;
+  if (maxTimestamp > 0) {
+    filteredPoints = dataPoints.filter(p => {
+      if (p.timestamp === null) return true; // keep fallback non-timestamped points
+      return p.timestamp >= filterThreshold;
+    });
+  }
+
+  const rawNumbers = filteredPoints.map(p => p.value);
+
+  // 4. Default string rate extraction if nothing found
+  if (rawNumbers.length === 0) {
     const rateMatches = content.match(/(?:rate|speed|kbps|mbps|val|value|y|data|point)[\s\S]{0,10}?([\d.]+)/gi);
     if (rateMatches) {
       rateMatches.forEach(m => {
         const numMatch = m.match(/[\d.]+/);
         if (numMatch) {
           const num = parseFloat(numMatch[0]);
-          if (!isNaN(num) && num > 0) numbers.push(num);
+          if (!isNaN(num) && num > 0) rawNumbers.push(num);
         }
       });
     }
   }
 
-  // Filter out extremely low or inactive values (less than 0.1 Mbps) to focus on active usage peaks
-  let activeSpeeds = numbers.filter(n => n > 0.1);
-  if (activeSpeeds.length === 0) return undefined;
+  // Filter out zero/near-zero values (inactive connection) to get active utilization
+  let activeSpeeds = rawNumbers.filter(n => n > 0.05);
 
-  // Let's normalize high numbers if they represent bps or kbps
+  if (activeSpeeds.length === 0) {
+    return {
+      ...defaultAnalysis,
+      reason: "لم يتم رصد أي نشاط تصفح أو تحميل نشط في الرسم البياني للحساب حالياً لتقدير السرعة القصوى للخط.",
+      warning: "تنبيه: لا يوجد استهلاك نشط كافٍ على الخط حالياً لتقدير سرعة الباقة بشكل دقيق."
+    };
+  }
+
+  // Normalize speeds if they are in bps, kbps
   const tempAvg = activeSpeeds.reduce((a, b) => a + b, 0) / activeSpeeds.length;
-  if (tempAvg > 10000000) {
-    // scale down from bps to mbps
+  if (tempAvg > 5000000) {
     activeSpeeds = activeSpeeds.map(n => n / 1000000);
-  } else if (tempAvg > 10000) {
-    // scale down from kbps to mbps
+  } else if (tempAvg > 5000) {
     activeSpeeds = activeSpeeds.map(n => n / 1000);
   }
 
-  // Step 1: Sort the speeds ascending to determine percentile values
-  const sortedSpeeds = [...activeSpeeds].sort((a, b) => a - b);
-  const totalCount = sortedSpeeds.length;
+  // Filter speeds again on Mbps basis
+  activeSpeeds = activeSpeeds.filter(n => n < 1200);
 
-  // Step 2: Extract a robust high-percentile value (85th percentile) to represent max steady speed,
-  // completely ignoring top anomalies/single-point outliers (spikes)
-  const percentileIndex = Math.min(Math.floor(totalCount * 0.85), totalCount - 1);
-  const estimatedPeak = sortedSpeeds[percentileIndex];
+  // Calculate statistics
+  const sorted = [...activeSpeeds].sort((a, b) => a - b);
+  const nElement = sorted.length;
 
-  // Step 3: Match the estimated peak to the nearest typical ISP package speed in Mbps
-  // Standard package speeds offered are generally: 4, 8, 10, 15, 20, 30, 40, 50, 60, 75, 80, 100, 150, 200, 300, 400, 500, 1000
-  const standardSpeeds = [4, 8, 10, 15, 20, 30, 40, 50, 60, 75, 80, 100, 150, 200, 300, 400, 500, 1000];
+  // Percentiles
+  const p95Val = sorted[Math.min(Math.floor(nElement * 0.95), nElement - 1)];
+  const p98Val = sorted[Math.min(Math.floor(nElement * 0.98), nElement - 1)];
+  const p85Val = sorted[Math.min(Math.floor(nElement * 0.85), nElement - 1)]; // stable peak indicator
 
-  let bestMatch = standardSpeeds[0];
-  let minDiff = Math.abs(estimatedPeak - bestMatch);
-
-  for (const speed of standardSpeeds) {
-    const diff = Math.abs(estimatedPeak - speed);
-    if (diff < minDiff) {
-      minDiff = diff;
-      bestMatch = speed;
+  // Extract local peaks
+  const localPeaks: number[] = [];
+  if (activeSpeeds.length === 1) {
+    localPeaks.push(activeSpeeds[0]);
+  } else {
+    for (let i = 0; i < activeSpeeds.length; i++) {
+      const curr = activeSpeeds[i];
+      const prev = i > 0 ? activeSpeeds[i - 1] : 0;
+      const next = i < activeSpeeds.length - 1 ? activeSpeeds[i + 1] : 0;
+      if (curr >= prev && curr >= next && curr > 0.5) {
+        localPeaks.push(curr);
+      }
     }
   }
 
-  // If the closest standard speed has a reasonable difference (e.g., within 35% of standard speed value),
-  // we use the standard speed to present a clean, rounded package tier.
-  // Otherwise, we gracefully round the peak value to the nearest integer.
-  let finalSpeedValue = bestMatch;
-  if (minDiff > bestMatch * 0.35) {
-    finalSpeedValue = Math.round(estimatedPeak);
+  const peaksToUse = localPeaks.length > 0 ? localPeaks : activeSpeeds;
+  const maxObserved = Math.max(...activeSpeeds);
+  const avgPeak = peaksToUse.reduce((a, b) => a + b, 0) / peaksToUse.length;
+
+  // Determine most frequent peak level by binning peak values in 1 Mbps intervals
+  const bins: { [key: number]: number } = {};
+  peaksToUse.forEach(p => {
+    const binVal = Math.round(p);
+    bins[binVal] = (bins[binVal] || 0) + 1;
+  });
+  let mostFreqBin = 10;
+  let maxCount = -1;
+  Object.keys(bins).forEach(binStr => {
+    const b = parseInt(binStr);
+    if (bins[b] > maxCount) {
+      maxCount = bins[b];
+      mostFreqBin = b;
+    }
+  });
+
+  // Target standard packages speed company list (strictly matched from fly-leaf images!)
+  const standardSpeeds = [1, 2, 4, 5, 10, 50];
+
+  // Align to the closest logical package cap.
+  const stablePeakRef = Math.max(p85Val, avgPeak);
+
+  let matchedPackage = 4;
+  let found = false;
+
+  // Select closest package where Cap * 1.15 >= stablePeakRef
+  for (const cap of standardSpeeds) {
+    if (cap * 1.15 >= stablePeakRef) {
+      matchedPackage = cap;
+      found = true;
+      break;
+    }
+  }
+  if (!found) {
+    matchedPackage = Math.round(stablePeakRef);
   }
 
-  // Ensure it's a valid positive speed
-  if (finalSpeedValue <= 0) {
-    finalSpeedValue = 10; // safe default
+  // Calculate confidence score
+  let confidence = 95;
+  let warnings: string[] = [];
+
+  if (nElement < 15) {
+    confidence -= 35;
+    warnings.push("مستوى البيانات المسترجعة ضئيل جداً لتأكيد موثوقية عالية.");
   }
 
-  return `${finalSpeedValue} Mbps`;
+  // check if there is high standard deviation / instability which degrades confidence
+  const variance = activeSpeeds.reduce((sum, item) => sum + Math.pow(item - avgPeak, 2), 0) / activeSpeeds.length;
+  const stdDev = Math.sqrt(variance);
+  if (stdDev / avgPeak > 0.4) {
+    confidence -= 15;
+    warnings.push("يوجد تذبذب كبير في معدل السرعات المرصودة، قد يكون الخط غير مستقر.");
+  }
+
+  // Check if data seems clipped (all peak values hitting exactly the same limit)
+  const hitsCapCount = activeSpeeds.filter(p => Math.abs(p - p95Val) < 0.2).length;
+  const clippedRatio = hitsCapCount / activeSpeeds.length;
+  let isClipped = false;
+  if (clippedRatio > 0.25 && activeSpeeds.length > 10) {
+    isClipped = true;
+    confidence += 5; // Flat plateau ceiling increases confidence
+  }
+
+  confidence = Math.max(30, Math.min(99, confidence));
+
+  const reason = isClipped
+    ? `تم رصد استقرار وثبات تام (Plateau) متكرر عند مستوى ${p95Val.toFixed(1)} Mbps مما يؤكد تفعيل محدد السرعة الأقصى لهذه الباقة لباقة ${matchedPackage} Mbps.`
+    : `استقرار متوسط القمم النشطة للخط عند حوالي ${avgPeak.toFixed(1)} Mbps مع بلوغ مستويات Percentile 95 بنحو ${p95Val.toFixed(1)} Mbps يشير بوضوح إلى تفعيل ملف سرعة باقة ${matchedPackage} Mbps على بورت المشترك.`;
+
+  const warningMsg = warnings.length > 0 ? warnings.join(" | ") : undefined;
+
+  return {
+    expectedPackage: `${matchedPackage} Mbps`,
+    confidence,
+    peakSpeed: `${maxObserved.toFixed(1)} Mbps`,
+    avgPeakSpeed: `${avgPeak.toFixed(1)} Mbps`,
+    p95Speed: `${p95Val.toFixed(1)} Mbps`,
+    p98Speed: `${p98Val.toFixed(1)} Mbps`,
+    mostFrequentPeak: `${mostFreqBin} Mbps`,
+    reason,
+    warning: warningMsg,
+    chartDataFound: true
+  };
+}
+
+function extractAndCalculateStatsSpeed(htmlOrData: any): string | undefined {
+  const analysis = analyzeHighchartsSpeed(htmlOrData);
+  return analysis ? analysis.expectedPackage : undefined;
 }
 
 // API Endpoints
@@ -659,7 +855,16 @@ app.post("/api/login", async (req, res) => {
     });
   }
 
-
+  // Unlimited speed analysis features deactivated as requested by user
+  /*
+  if (balance.isUnlimited) {
+    console.log(`Unlimited profile found for user ${username}. Fetching Highcharts traffic statistics...`);
+    const statsData = await fetchStatsPage(result.cookies);
+    if (statsData) {
+      balance.speedAnalysis = analyzeHighchartsSpeed(statsData);
+    }
+  }
+  */
 
   // Create active session
   const token = crypto.randomUUID();
@@ -727,6 +932,17 @@ app.post("/api/balance", async (req, res) => {
       message_en: "Could not retrieve balance from ISP portal at the moment, please try again later."
     });
   }
+
+  // Unlimited speed analysis features deactivated as requested by user
+  /*
+  if (balance.isUnlimited) {
+    console.log(`Unlimited profile found for user ${session.username} on refresh. Fetching Highcharts traffic statistics...`);
+    const statsData = await fetchStatsPage(session.cookies);
+    if (statsData) {
+      balance.speedAnalysis = analyzeHighchartsSpeed(statsData);
+    }
+  }
+  */
 
   session.lastActive = Date.now();
   return res.json({

@@ -1,3 +1,16 @@
+export interface SpeedAnalysisData {
+  expectedPackage: string;
+  confidence: number;
+  peakSpeed: string;
+  reason: string;
+  warning?: string;
+  avgPeakSpeed: string;
+  p95Speed: string;
+  p98Speed: string;
+  mostFrequentPeak: string;
+  chartDataFound: boolean;
+}
+
 export interface BalanceData {
   remaining_mb: number;
   remaining_gb: number;
@@ -13,6 +26,7 @@ export interface BalanceData {
   speed?: string;
   monthFee?: string;
   calculatedSpeed?: string;
+  speedAnalysis?: SpeedAnalysisData;
 }
 
 export interface UserSessionData {

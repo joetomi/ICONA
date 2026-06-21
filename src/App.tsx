@@ -42,7 +42,10 @@ const getTranslatedStatus = (statusValue: string | undefined, lang: Language): s
 const formatNextPayment = (nextPaymentText: string | undefined, language: Language): string => {
   if (!nextPaymentText) return "";
   
-  const lines = nextPaymentText.split("\n");
+  // Strip out hu-100 or variations
+  const cleanNextPayment = nextPaymentText.replace(/hu[-_ ]?100/gi, "").trim();
+  
+  const lines = cleanNextPayment.split("\n");
   
   const processedLines = lines.map(line => {
     let cleanLine = line.trim();
@@ -1030,6 +1033,8 @@ export default function App() {
                           </p>
                         )}
                       </div>
+
+
                     </motion.div>
                   ) : (
                     <motion.div
