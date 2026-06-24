@@ -162,7 +162,7 @@ const getExtractedEndDate = (balanceData: any, lang: Language = "ar"): string =>
 
   // If effectiveDeposit is negative, or if the deposit is negative under old logic
   if (effectiveDeposit < 0 || isDepositNegative(balanceData.deposit)) {
-    return baseDate;
+    return lang === "ar" ? "الرجاء التعبئة" : "Please recharge";
   }
 
   // Calculate pre-paid extensions from effectiveDeposit
@@ -246,9 +246,8 @@ const checkSubscriptionState = (balance: any) => {
   
   // Calculate total required to recharge if netBalance is negative
   let totalNeeded = 0;
-  if (hasCredit && deposit < creditAmountVal) {
-    const shortage = creditAmountVal - deposit;
-    totalNeeded = shortage + monthFee;
+  if (netBalance < 0) {
+    totalNeeded = Math.abs(netBalance) + monthFee;
   }
   
   // Parse endDate
@@ -1123,26 +1122,44 @@ export default function App() {
 
                       {/* Balance Big Typography */}
                       <div className="py-4 relative flex flex-col items-center justify-center">
-                        {session.balance.isUnlimited ? (
-                          <div className="flex flex-col items-center justify-center">
-                            <span className={`text-4xl sm:text-6xl font-black font-sans tracking-tight ${
-                              isDarkMode ? "text-white animate-pulse" : "text-slate-900"
-                            }`}>
-                              {getExtractedEndDate(session.balance, lang) || "---"}
-                            </span>
-                            <span className="text-xs sm:text-sm font-semibold tracking-wider text-[#D4AF37] mt-3 uppercase">
-                              {t.packageExpiry || "تاريخ انتهاء الباقة"}
-                            </span>
-                            {getPrepaidMonths(session.balance) > 0 && (
-                              <span className="text-[11px] sm:text-[12px] font-bold px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 mt-3.5 text-center max-w-[90%] leading-relaxed border border-emerald-500/15 animate-pulse">
-                                📡 {lang === "ar" 
-                                  ? `تم التمديد تلقائياً لـ ${getPrepaidMonths(session.balance)} شهر إضافي من الرصيد المتاح`
-                                  : `Auto-extended by ${getPrepaidMonths(session.balance)} extra month(s) from available balance`
-                                }
+                        {session.balance.isUnlimited ? (() => {
+                          const subState = checkSubscriptionState(session.balance);
+                          const isInactive = subState.netBalance < 0 || subState.expired;
+                          
+                          if (isInactive) {
+                            return (
+                              <div className="flex flex-col items-center justify-center">
+                                <span className="text-4xl sm:text-5xl font-black tracking-tight text-rose-500 animate-pulse text-center">
+                                  {lang === "ar" ? "رصيد غير كافي" : "Insufficient Balance"}
+                                </span>
+                                <span className="text-xs sm:text-sm font-semibold tracking-wider text-slate-400 mt-3 uppercase text-center">
+                                  {lang === "ar" ? "الرجاء تعبئة الرصيد لتفعيل الاشتراك" : "Please recharge to activate subscription"}
+                                </span>
+                              </div>
+                            );
+                          }
+                          
+                          return (
+                            <div className="flex flex-col items-center justify-center">
+                              <span className={`text-4xl sm:text-6xl font-black font-sans tracking-tight ${
+                                isDarkMode ? "text-white animate-pulse" : "text-slate-900"
+                              }`}>
+                                {getExtractedEndDate(session.balance, lang) || "---"}
                               </span>
-                            )}
-                          </div>
-                        ) : (
+                              <span className="text-xs sm:text-sm font-semibold tracking-wider text-[#D4AF37] mt-3 uppercase">
+                                {t.packageExpiry || "تاريخ انتهاء الباقة"}
+                              </span>
+                              {getPrepaidMonths(session.balance) > 0 && (
+                                <span className="text-[11px] sm:text-[12px] font-bold px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 mt-3.5 text-center max-w-[90%] leading-relaxed border border-emerald-500/15 animate-pulse">
+                                  📡 {lang === "ar" 
+                                    ? `تم التمديد تلقائياً لـ ${getPrepaidMonths(session.balance)} شهر إضافي من الرصيد المتاح`
+                                    : `Auto-extended by ${getPrepaidMonths(session.balance)} extra month(s) from available balance`
+                                  }
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })() : (
                           <div className="flex items-baseline gap-2.5">
                             <span className={`text-6xl sm:text-8xl font-black font-sans tracking-tight ${
                               isDarkMode ? "text-white animate-pulse" : "text-slate-900"
@@ -1266,14 +1283,25 @@ export default function App() {
                         )}
 
                         {/* Status field */}
-                        {session.balance.status && (
-                          <div className="flex justify-between items-center text-sm">
-                            <span className={isDarkMode ? "text-white/50" : "text-slate-400"}>{t.statusLabel}</span>
-                            <span className="px-3.5 py-1 rounded-full bg-emerald-500/10 text-emerald-400 text-xs font-black">
-                              {getTranslatedStatus(session.balance.status, lang)}
-                            </span>
-                          </div>
-                        )}
+                        {session.balance.status && (() => {
+                          const subState = checkSubscriptionState(session.balance);
+                          const isInactive = subState.netBalance < 0 || subState.expired;
+                          const displayStatus = isInactive 
+                            ? (lang === "ar" ? "غير نشط" : "Inactive") 
+                            : getTranslatedStatus(session.balance.status, lang);
+                          return (
+                            <div className="flex justify-between items-center text-sm">
+                              <span className={isDarkMode ? "text-white/50" : "text-slate-400"}>{t.statusLabel}</span>
+                              <span className={`px-3.5 py-1 rounded-full text-xs font-black border ${
+                                isInactive 
+                                  ? "bg-rose-500/10 text-rose-400 border-rose-500/15" 
+                                  : "bg-emerald-500/10 text-emerald-400 border-emerald-500/15"
+                              }`}>
+                                {displayStatus}
+                              </span>
+                            </div>
+                          );
+                        })()}
 
                         {/* Start Date field */}
                         {session.balance.startDate && (
@@ -1284,7 +1312,7 @@ export default function App() {
                         )}
 
                         {/* End Date field */}
-                        {getExtractedEndDate(session.balance, lang) && (
+                        {getExtractedEndDate(session.balance, lang) && checkSubscriptionState(session.balance).netBalance >= 0 && (
                           <div className="flex justify-between items-center text-sm">
                             <span className={isDarkMode ? "text-white/50" : "text-slate-400"}>{t.endDateLabel}</span>
                             <span className={`font-mono font-bold ${isDarkMode ? "text-white/95" : "text-slate-800"}`}>{getExtractedEndDate(session.balance, lang)}</span>

@@ -296,7 +296,7 @@ function parseBalance(html: string): BalanceData | null {
       } else if (label.includes("contract date") || label.includes("تاريخ العقد")) {
         contractDate = value;
       } else if (label.includes("deposit") || label.includes("رصيد")) {
-        const m = value.match(/[\d.]+/);
+        const m = value.match(/[-\d.]+/);
         if (m) finalBalance.deposit = m[0];
       } else if (label.includes("month fee") || label.includes("monthly fee") || label.includes("سعر الباقة") || label.includes("قيمة الاشتراك") || label.includes("رسوم الاشتراك") || label.includes("tarif plan fee")) {
         const m = value.match(/[\d.]+/);
@@ -333,7 +333,7 @@ function parseBalance(html: string): BalanceData | null {
       } else if (label.includes("contract date") || label.includes("تاريخ العقد")) {
         if (!contractDate) contractDate = value;
       } else if (label.includes("deposit") && !finalBalance.deposit) {
-        const m = value.match(/[\d.]+/);
+        const m = value.match(/[-\d.]+/);
         if (m) finalBalance.deposit = m[0];
       } else if ((label.includes("month fee") || label.includes("monthly fee") || label.includes("سعر الباقة") || label.includes("قيمة الاشتراك") || label.includes("رسوم الاشتراك")) && !finalBalance.monthFee) {
         const m = value.match(/[\d.]+/);
