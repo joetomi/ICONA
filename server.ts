@@ -288,7 +288,8 @@ function parseBalance(html: string): BalanceData | null {
       } else if (label.includes("address") || label.includes("عنوان")) {
         finalBalance.address = value.replace(/\/\s*$/, "");
       } else if (label.includes("status") || label.includes("حالة")) {
-        if (!finalBalance.status || value.toLowerCase() === "active" || value.includes("نشط")) {
+        const valLower = value.toLowerCase();
+        if (!finalBalance.status || valLower === "active" || valLower.includes("too small") || valLower.includes("suspended") || valLower.includes("inactive") || valLower.includes("deposit") || value.includes("نشط")) {
           finalBalance.status = value;
         }
       } else if (label.includes("activation") || label.includes("تفعيل") || label.includes("بداية الاشتراك")) {
@@ -928,7 +929,7 @@ app.post("/api/balance", async (req, res) => {
 
   // Attemp directly using current active cookies
   let html = await fetchProfilePage(session.cookies);
-  let balance = parseBalance(html || "");
+  let balance = (html && verifyLoginSuccess(html)) ? parseBalance(html) : null;
 
   // If fetching with cookies fails or session expired on ISP, automatically execute re-login
   if (!balance && session.password) {

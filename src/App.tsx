@@ -16,7 +16,9 @@ import {
   Sun,
   Check,
   Home,
-  Gauge
+  Gauge,
+  Eye,
+  EyeOff
 } from "lucide-react";
 import { translations } from "./translations";
 import { Language, UserSessionData } from "./types";
@@ -299,6 +301,7 @@ export default function App() {
   // UI state
   const [usernameInput, setUsernameInput] = useState("");
   const [passwordInput, setPasswordInput] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [isLoggingInSuccess, setIsLoggingInSuccess] = useState(false);
   const [statusMessage, setStatusMessage] = useState("");
@@ -957,17 +960,33 @@ export default function App() {
                       </span>
                       <input
                         id="pass-input"
-                        type="password"
+                        type={showPassword ? "text" : "password"}
                         dir="ltr"
                         value={passwordInput}
                         onChange={(e) => setPasswordInput(e.target.value)}
                         placeholder={t.passwordPlaceholder}
-                        className={`w-full py-3 px-5 ps-11 pe-4 rounded-xl text-base focus:ring-2 focus:ring-[#D4AF37]/40 focus:outline-none transition-all text-center font-mono ${
+                        className={`w-full py-3 px-5 ps-11 pe-11 rounded-xl text-base focus:ring-2 focus:ring-[#D4AF37]/40 focus:outline-none transition-all text-center font-mono ${
                           isDarkMode 
                             ? "bg-white/5 border-white/10 text-white placeholder-white/20 focus:border-[#D4AF37]" 
                             : "bg-slate-50 border-slate-200 text-slate-900 placeholder-slate-400 focus:border-[#D4AF37]"
                         }`}
                       />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className={`absolute inset-y-0 end-0 pe-4 flex items-center transition-colors cursor-pointer ${
+                          isDarkMode 
+                            ? "text-slate-400 hover:text-white" 
+                            : "text-slate-500 hover:text-slate-800"
+                        }`}
+                        title={showPassword ? "Hide password" : "Show password"}
+                      >
+                        {showPassword ? (
+                          <EyeOff className="w-[18px] h-[18px]" />
+                        ) : (
+                          <Eye className="w-[18px] h-[18px]" />
+                        )}
+                      </button>
                     </div>
                   </div>
 
