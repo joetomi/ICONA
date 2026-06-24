@@ -22,6 +22,8 @@ export interface BalanceData {
   endDate?: string;
   nextPayment?: string;
   deposit?: string;
+  creditAmount?: string;
+  creditExpiry?: string;
   isUnlimited?: boolean;
   speed?: string;
   monthFee?: string;

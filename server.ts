@@ -186,6 +186,8 @@ interface BalanceData {
   endDate?: string;
   nextPayment?: string;
   deposit?: string;
+  creditAmount?: string;
+  creditExpiry?: string;
   isUnlimited?: boolean;
   speed?: string;
   monthFee?: string;
@@ -299,6 +301,15 @@ function parseBalance(html: string): BalanceData | null {
       } else if (label.includes("month fee") || label.includes("monthly fee") || label.includes("سعر الباقة") || label.includes("قيمة الاشتراك") || label.includes("رسوم الاشتراك") || label.includes("tarif plan fee")) {
         const m = value.match(/[\d.]+/);
         if (m) finalBalance.monthFee = m[0];
+      } else if (label.includes("credit") || label.includes("كريدت") || label.includes("الرصيد الممنوح") || label.includes("الائتمان")) {
+        const amountMatch = value.match(/[-\d.]+/);
+        if (amountMatch) {
+          finalBalance.creditAmount = amountMatch[0];
+        }
+        const dateMatch = value.match(/(\d{4}-\d{2}-\d{2})/);
+        if (dateMatch) {
+          finalBalance.creditExpiry = dateMatch[1];
+        }
       }
     }
 
@@ -327,6 +338,15 @@ function parseBalance(html: string): BalanceData | null {
       } else if ((label.includes("month fee") || label.includes("monthly fee") || label.includes("سعر الباقة") || label.includes("قيمة الاشتراك") || label.includes("رسوم الاشتراك")) && !finalBalance.monthFee) {
         const m = value.match(/[\d.]+/);
         if (m) finalBalance.monthFee = m[0];
+      } else if ((label.includes("credit") || label.includes("كريدت") || label.includes("الرصيد الممنوح") || label.includes("الائتمان")) && !finalBalance.creditAmount) {
+        const amountMatch = value.match(/[-\d.]+/);
+        if (amountMatch) {
+          finalBalance.creditAmount = amountMatch[0];
+        }
+        const dateMatch = value.match(/(\d{4}-\d{2}-\d{2})/);
+        if (dateMatch) {
+          finalBalance.creditExpiry = dateMatch[1];
+        }
       }
     }
 

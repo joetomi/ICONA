@@ -99,12 +99,41 @@ const formatNextPayment = (nextPaymentText: string | undefined, language: Langua
   return processedLines.join("\n");
 };
 
-const getExtractedEndDate = (balanceData: any): string => {
+const isDepositNegative = (depositStr: string | undefined | null): boolean => {
+  if (!depositStr) return false;
+  // Strip out any non-numeric and non-negative/decimal characters to get a raw number
+  const cleaned = String(depositStr).replace(/[^\d.-]/g, "");
+  const num = parseFloat(cleaned);
+  return !isNaN(num) && num < 0;
+};
+
+const isDateBeforeToday = (dateStr: string): boolean => {
+  if (!dateStr || dateStr === "0000-00-00" || dateStr === "الرجاء التعبئة" || dateStr === "Please recharge") return false;
+  const parts = dateStr.split("-").map(Number);
+  if (parts.length === 3) {
+    const [y, m, d] = parts;
+    if (y && m && d) {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const targetDate = new Date(y, m - 1, d);
+      targetDate.setHours(0, 0, 0, 0);
+      return today > targetDate;
+    }
+  }
+  return false;
+};
+
+const getExtractedEndDate = (balanceData: any, lang: Language = "ar"): string => {
   if (!balanceData) return "";
   
-  // Try to find a date like YYYY-MM-DD in nextPayment string first
+  // 1. Determine base date
   let baseDate = "";
-  if (balanceData.nextPayment) {
+  const creditAmountVal = parseFloat(balanceData.creditAmount || "0");
+  const hasCredit = !isNaN(creditAmountVal) && creditAmountVal > 0;
+  
+  if (hasCredit && balanceData.creditExpiry && balanceData.creditExpiry !== "0000-00-00") {
+    baseDate = balanceData.creditExpiry;
+  } else if (balanceData.nextPayment) {
     const dateMatch = balanceData.nextPayment.match(/(\d{4}-\d{2}-\d{2})/);
     if (dateMatch) {
       baseDate = dateMatch[1];
@@ -114,16 +143,35 @@ const getExtractedEndDate = (balanceData: any): string => {
   if (!baseDate) {
     baseDate = balanceData.endDate || "";
   }
-
+  
   if (!baseDate) return "";
 
-  // If it is an unlimited package, calculate pre-paid extensions from deposit
+  // 2. If the base date is before today, return "Please recharge" / "الرجاء التعبئة"
+  if (isDateBeforeToday(baseDate)) {
+    return lang === "ar" ? "الرجاء التعبئة" : "Please recharge";
+  }
+
+  // 3. Calculate extra months based on deposit & credit
+  const depositStrCleaned = String(balanceData.deposit || "0").replace(/[^\d.-]/g, "");
+  const deposit = parseFloat(depositStrCleaned);
+  
+  let effectiveDeposit = deposit;
+  if (hasCredit) {
+    effectiveDeposit = deposit - creditAmountVal;
+  }
+
+  // If effectiveDeposit is negative, or if the deposit is negative under old logic
+  if (effectiveDeposit < 0 || isDepositNegative(balanceData.deposit)) {
+    return baseDate;
+  }
+
+  // Calculate pre-paid extensions from effectiveDeposit
   if (balanceData.isUnlimited) {
-    const deposit = parseFloat(balanceData.deposit || "0");
-    const monthFee = parseFloat(balanceData.monthFee || "100.00");
+    const monthFeeStrCleaned = String(balanceData.monthFee || "100.00").replace(/[^\d.-]/g, "");
+    const monthFee = parseFloat(monthFeeStrCleaned);
     
-    if (monthFee > 0 && deposit >= monthFee) {
-      const extraMonths = Math.floor(deposit / monthFee);
+    if (monthFee > 0 && effectiveDeposit >= monthFee) {
+      const extraMonths = Math.floor(effectiveDeposit / monthFee);
       if (extraMonths > 0) {
         try {
           const parts = baseDate.split("-");
@@ -140,7 +188,12 @@ const getExtractedEndDate = (balanceData: any): string => {
               }
               const mm = String(month).padStart(2, '0');
               const dd = String(day).padStart(2, '0');
-              return `${year}-${mm}-${dd}`;
+              const finalDate = `${year}-${mm}-${dd}`;
+              
+              if (isDateBeforeToday(finalDate)) {
+                return lang === "ar" ? "الرجاء التعبئة" : "Please recharge";
+              }
+              return finalDate;
             }
           }
         } catch (e) {
@@ -149,18 +202,78 @@ const getExtractedEndDate = (balanceData: any): string => {
       }
     }
   }
-  
+
   return baseDate;
 };
 
 const getPrepaidMonths = (balanceData: any): number => {
   if (!balanceData || !balanceData.isUnlimited) return 0;
-  const deposit = parseFloat(balanceData.deposit || "0");
-  const monthFee = parseFloat(balanceData.monthFee || "100.00");
-  if (monthFee > 0 && deposit >= monthFee) {
-    return Math.floor(deposit / monthFee);
+  if (isDepositNegative(balanceData.deposit)) return 0;
+  
+  const depositStrCleaned = String(balanceData.deposit || "0").replace(/[^\d.-]/g, "");
+  const deposit = parseFloat(depositStrCleaned);
+  const creditAmountVal = parseFloat(balanceData.creditAmount || "0");
+  const monthFeeStrCleaned = String(balanceData.monthFee || "100.00").replace(/[^\d.-]/g, "");
+  const monthFee = parseFloat(monthFeeStrCleaned);
+  
+  let effectiveDeposit = deposit;
+  if (!isNaN(creditAmountVal) && creditAmountVal > 0) {
+    effectiveDeposit = deposit - creditAmountVal;
+  }
+  
+  if (monthFee > 0 && effectiveDeposit >= monthFee) {
+    return Math.floor(effectiveDeposit / monthFee);
   }
   return 0;
+};
+
+const checkSubscriptionState = (balance: any) => {
+  if (!balance) return { expired: false, depleted: false, timeExpired: false, netBalance: 0, totalNeeded: 0 };
+  
+  const isUnlimited = !!balance.isUnlimited;
+  const status = (balance.status || "").trim().toLowerCase();
+  
+  // Parse deposit, credit, month fee
+  const depositStrCleaned = String(balance.deposit || "0").replace(/[^\d.-]/g, "");
+  const deposit = parseFloat(depositStrCleaned);
+  const creditAmountVal = parseFloat(balance.creditAmount || "0");
+  const monthFeeStrCleaned = String(balance.monthFee || "100.00").replace(/[^\d.-]/g, "");
+  const monthFee = parseFloat(monthFeeStrCleaned);
+  
+  const hasCredit = !isNaN(creditAmountVal) && creditAmountVal > 0;
+  const netBalance = hasCredit ? deposit - creditAmountVal : deposit;
+  const isDepositNeg = netBalance < 0;
+  
+  // Calculate total required to recharge if netBalance is negative
+  let totalNeeded = 0;
+  if (hasCredit && deposit < creditAmountVal) {
+    const shortage = creditAmountVal - deposit;
+    totalNeeded = shortage + monthFee;
+  }
+  
+  // Parse endDate
+  const endDateStr = getExtractedEndDate(balance, "ar");
+  
+  let isTimeExpired = false;
+  if (endDateStr) {
+    if (endDateStr === "الرجاء التعبئة" || endDateStr === "Please recharge") {
+      isTimeExpired = true;
+    } else {
+      isTimeExpired = isDateBeforeToday(endDateStr);
+    }
+  }
+  
+  const inactiveStatus = status === "inactive" || status === "suspended" || status.includes("منتهي") || status.includes("غير نشط") || status.includes("معلق");
+  const isExpired = isTimeExpired || inactiveStatus || isDepositNeg;
+  
+  if (isUnlimited) {
+    return { expired: isExpired, depleted: false, timeExpired: isTimeExpired || isDepositNeg, netBalance, totalNeeded };
+  } else {
+    const remainingGb = balance.remaining_gb !== undefined ? balance.remaining_gb : 0;
+    const remainingMb = balance.remaining_mb !== undefined ? balance.remaining_mb : 0;
+    const depleted = (remainingGb <= 0 && remainingMb <= 0) || isDepositNeg;
+    return { expired: isExpired, depleted, timeExpired: isTimeExpired || isDepositNeg, netBalance, totalNeeded };
+  }
 };
 
 export default function App() {
@@ -976,13 +1089,31 @@ export default function App() {
                         }`}>
                           {lang === "ar" ? "مرحباً بك يا" : "Welcome,"} <span className="text-[#D4AF37] font-bold">{session.balance.fullName || session.username}</span>
                         </h3>
-                        {session.balance.deposit && (
-                          <div className="text-center mt-2 mb-4">
-                            <span className={`text-lg sm:text-xl font-bold tracking-wide ${isDarkMode ? "text-[#D4AF37]" : "text-[#D4AF37]"}`}>
-                              {t.depositLabel}: <span className={isDarkMode ? "text-white" : "text-slate-800"}>{session.balance.deposit} {lang === "ar" ? "د.ل" : "LYD"}</span>
-                            </span>
-                          </div>
-                        )}
+                        {(() => {
+                          if (!session.balance.deposit) return null;
+                          const depositStrCleaned = String(session.balance.deposit || "0").replace(/[^\d.-]/g, "");
+                          const deposit = parseFloat(depositStrCleaned);
+                          const creditAmountVal = parseFloat(session.balance.creditAmount || "0");
+                          const hasCredit = !isNaN(creditAmountVal) && creditAmountVal > 0;
+                          const netBalance = hasCredit ? deposit - creditAmountVal : deposit;
+                          
+                          return (
+                            <div className="text-center mt-2 mb-4 space-y-1">
+                              <span className={`text-lg sm:text-xl font-bold tracking-wide ${isDarkMode ? "text-[#D4AF37]" : "text-[#D4AF37]"}`}>
+                                {t.depositLabel}: <span className={isDarkMode ? "text-white" : "text-slate-800"}>
+                                  {netBalance.toFixed(2)} {lang === "ar" ? "د.ل" : "LYD"}
+                                </span>
+                              </span>
+                              {hasCredit && (
+                                <div className="text-xs sm:text-sm font-semibold opacity-85 text-slate-500 dark:text-white/60">
+                                  {lang === "ar" 
+                                    ? `(الكريديت: ${creditAmountVal.toFixed(2)} د.ل - الرصيد الأصلي: ${deposit.toFixed(2)} د.ل)` 
+                                    : `(Credit: ${creditAmountVal.toFixed(2)} LYD - Original Balance: ${deposit.toFixed(2)} LYD)`}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })()}
                         <p className={`text-xl sm:text-2xl font-black tracking-tight ${
                           isDarkMode ? "text-white" : "text-slate-800"
                         }`}>
@@ -997,7 +1128,7 @@ export default function App() {
                             <span className={`text-4xl sm:text-6xl font-black font-sans tracking-tight ${
                               isDarkMode ? "text-white animate-pulse" : "text-slate-900"
                             }`}>
-                              {getExtractedEndDate(session.balance) || "---"}
+                              {getExtractedEndDate(session.balance, lang) || "---"}
                             </span>
                             <span className="text-xs sm:text-sm font-semibold tracking-wider text-[#D4AF37] mt-3 uppercase">
                               {t.packageExpiry || "تاريخ انتهاء الباقة"}
@@ -1034,6 +1165,55 @@ export default function App() {
                         )}
                       </div>
 
+                      {/* Subscription Expiration / Quota Depletion Alert */}
+                      {(() => {
+                        const subState = checkSubscriptionState(session.balance);
+                        let alertTitle = "";
+                        let alertSub = "";
+                        
+                        if (subState.totalNeeded > 0) {
+                          alertTitle = lang === "ar" ? "الرجاء التعبئة" : "Please recharge";
+                          alertSub = lang === "ar" 
+                            ? `المبلغ المطلوب للتعبئة لتفعيل الاشتراك: ${subState.totalNeeded.toFixed(2)} د.ل`
+                            : `Required recharge to activate: ${subState.totalNeeded.toFixed(2)} LYD`;
+                        } else if (session.balance.isUnlimited) {
+                          if (subState.expired) {
+                            alertTitle = lang === "ar" ? "انتهت مدة الاشتراك" : "Subscription expired";
+                          }
+                        } else {
+                          if (subState.depleted) {
+                            alertTitle = lang === "ar" ? "انتهى الرصيد" : "Balance depleted";
+                          } else if (subState.timeExpired) {
+                            alertTitle = lang === "ar" ? "انتهت مدة الاشتراك" : "Subscription expired";
+                          }
+                        }
+
+                        if (!alertTitle) return null;
+
+                        return (
+                          <motion.div
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            className={`p-4 rounded-[20px] border text-center transition-all duration-300 flex flex-col items-center justify-center gap-1.5 ${
+                              isDarkMode 
+                                ? "bg-red-500/10 border-red-500/20 shadow-[0_4px_24px_rgba(239,68,68,0.08)] text-red-400" 
+                                : "bg-red-500/5 border-red-500/15 shadow-[0_4px_20px_rgba(239,68,68,0.03)] text-red-600"
+                            }`}
+                          >
+                            <div className="flex items-center gap-2.5 justify-center">
+                              <AlertCircle className="w-5 h-5 shrink-0 animate-pulse" />
+                              <span className="font-bold tracking-tight text-sm sm:text-base">{alertTitle}</span>
+                            </div>
+                            {alertSub && (
+                              <p className={`text-xs sm:text-sm font-semibold opacity-90 ${
+                                isDarkMode ? "text-red-300/90" : "text-red-800/90"
+                              }`}>
+                                {alertSub}
+                              </p>
+                            )}
+                          </motion.div>
+                        );
+                      })()}
 
                     </motion.div>
                   ) : (
@@ -1104,15 +1284,37 @@ export default function App() {
                         )}
 
                         {/* End Date field */}
-                        {getExtractedEndDate(session.balance) && (
+                        {getExtractedEndDate(session.balance, lang) && (
                           <div className="flex justify-between items-center text-sm">
                             <span className={isDarkMode ? "text-white/50" : "text-slate-400"}>{t.endDateLabel}</span>
-                            <span className={`font-mono font-bold ${isDarkMode ? "text-white/95" : "text-slate-800"}`}>{getExtractedEndDate(session.balance)}</span>
+                            <span className={`font-mono font-bold ${isDarkMode ? "text-white/95" : "text-slate-800"}`}>{getExtractedEndDate(session.balance, lang)}</span>
+                          </div>
+                        )}
+
+                        {/* Credit field if present */}
+                        {session.balance.creditAmount && parseFloat(session.balance.creditAmount) > 0 && (
+                          <div className="flex justify-between items-center text-sm">
+                            <span className={isDarkMode ? "text-white/50" : "text-slate-400"}>
+                              {lang === "ar" ? "رصيد الكريديت" : "Credit Balance"}
+                            </span>
+                            <span className="font-mono font-bold text-amber-500">
+                              {parseFloat(session.balance.creditAmount).toFixed(2)} {lang === "ar" ? "د.ل" : "LYD"}
+                            </span>
+                          </div>
+                        )}
+                        {session.balance.creditExpiry && session.balance.creditExpiry !== "0000-00-00" && parseFloat(session.balance.creditAmount || "0") > 0 && (
+                          <div className="flex justify-between items-center text-sm">
+                            <span className={isDarkMode ? "text-white/50" : "text-slate-400"}>
+                              {lang === "ar" ? "تاريخ انتهاء الكريديت" : "Credit Expiration"}
+                            </span>
+                            <span className={`font-mono font-bold ${isDarkMode ? "text-white/95" : "text-slate-800"}`}>
+                              {session.balance.creditExpiry}
+                            </span>
                           </div>
                         )}
                         
                         {/* Next Payment Callout Alert */}
-                        {session.balance.nextPayment && (
+                        {session.balance.nextPayment && !isDepositNegative(session.balance.deposit) && checkSubscriptionState(session.balance).netBalance >= 0 && (
                           <div className="pt-4 border-t border-dashed border-slate-200 dark:border-white/5 space-y-2">
                             <div className="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-[#D4AF37]">
                               <Activity className="w-4.5 h-4.5 animate-pulse" />
